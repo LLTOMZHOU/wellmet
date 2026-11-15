@@ -1,0 +1,27 @@
+{
+  // wellmet-public: booking pages, JSON API and the no-login agent endpoint.
+  // No database, no KV, no secret; it can only call core's PublicApi.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "wellmet-public",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "meet.yuxingzhou.me", "custom_domain": true }],
+
+  // Styles, fonts and the copy script are served straight from here.
+  "assets": { "directory": "./static" },
+
+  "services": [{ "binding": "CORE", "service": "wellmet-core", "entrypoint": "PublicApi" }],
+  "ratelimits": [
+    { "name": "RL_READ", "namespace_id": "41004", "simple": { "limit": 40, "period": 60 } },
+    { "name": "RL_WRITE", "namespace_id": "41005", "simple": { "limit": 5, "period": 60 } }
+  ],
+
+  "vars": {
+    "PUBLIC_URL": "https://meet.yuxingzhou.me",
+    "OWNER_NAME": "Tom Zhou"
+  }
+}

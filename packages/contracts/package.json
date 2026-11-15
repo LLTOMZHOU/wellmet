@@ -1,0 +1,14 @@
+{
+  "name": "@wellmet/contracts",
+  "private": true,
+  "type": "module",
+  "description": "Schemas and types shared by Wellmet's three Workers.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./html": "./src/html.ts",
+    "./mcp": "./src/mcp.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

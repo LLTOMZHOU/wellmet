@@ -13,7 +13,7 @@ import type { BookingReceipt, CalendarDate, Day, EventTypeSummary, Host, Month }
 
 const out = resolve(process.argv[2] ?? '.oil-ui/booking-ui/preview');
 mkdirSync(out, { recursive: true });
-cpSync(resolve('packages/public/assets'), join(out, 'assets'), { recursive: true });
+cpSync(resolve('packages/public/static/assets'), join(out, 'assets'), { recursive: true });
 
 const host: Host = { name: 'Tom Zhou' };
 const base = 'https://meet.yuxingzhou.me';

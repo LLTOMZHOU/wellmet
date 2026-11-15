@@ -28,7 +28,7 @@ Today Tom has no scheduler; the alternative is Calendly or a self-hosted project
 | Id | Scenario | Measure | Priority | Basis |
 |---|---|---|---|---|
 | F1 | Tom adds the scheduler to Claude, ChatGPT or Grok by URL and signs in | Connector added and usable with no dashboard and no pasted secrets; works in all three | must (Claude, ChatGPT), should (Grok) | stated |
-| F2 | Tom asks his agent to create or change an event type | Duration, buffers before and after, minimum notice, booking window, daily cap, working hours, confirmation mode, intake questions and location are all settable by conversation | must | stated |
+| F2 | Tom asks his agent to create, change, duplicate, preview or archive any kind of meeting | Every event-type setting is settable by conversation, with no built-in types: length options, buffers, minimum notice, window, daily and weekly caps, named schedules and date overrides, confirmation mode, intake questions, location (Meet, phone, in person) and listed or unlisted. (Widened 2026-11-15) | must | stated |
 | F3 | Tom asks his agent about or acts on bookings | Can list, inspect, approve, decline, cancel, reschedule and block time through MCP tools | must | stated |
 | F4 | A visitor opens an event link, picks a slot and submits name and email | Booking recorded; calendar invite arrives from Tom's Outlook with a unique Meet link | must | stated |
 | F5 | A visitor copies one line from the page into an agent that can connect to MCP servers or make HTTP POST requests | Agent finds slots and requests a booking with no login and no API key | must | stated |
@@ -157,6 +157,10 @@ After the options and the four reviews were written, Tom questioned whether the 
 | K8 | About an hour of Tom's hands-on time | Two reviewers found every option exceeds 30 minutes |
 
 Options A, B and C and the four files in `review/` were written against the earlier wording.
+
+## Frame revision 3 (2026-11-15)
+
+Tom asked for any meeting type to be addable and configurable from his agent. F2 now also covers several length options per type, unlisted types, phone and in-person locations, named schedules shared by types, date overrides, weekly caps, and previewing a type's open times before saving. The design is updated in `options/d.md`, section "Event type settings".
 
 ## Question-bank topics skipped
 

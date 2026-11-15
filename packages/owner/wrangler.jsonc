@@ -1,0 +1,26 @@
+{
+  // wellmet-owner: Tom's sign-in (OAuth for MCP clients), his MCP tools, and
+  // the pages only he opens. No secrets: provider code exchange happens in core.
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "wellmet-owner",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-15",
+  // global_fetch_strictly_public: required for Client ID Metadata Documents (CIMD).
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "meet-mcp.yuxingzhou.me", "custom_domain": true }],
+
+  "services": [{ "binding": "CORE", "service": "wellmet-core", "entrypoint": "OwnerApi" }],
+  "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "161f7ae0ee1d4c5d9a78c03964e15c14" }],
+  "ratelimits": [{ "name": "RL_OWNER", "namespace_id": "41003", "simple": { "limit": 20, "period": 60 } }],
+  "triggers": { "crons": ["*/10 * * * *"] },
+
+  "vars": {
+    "OWNER_URL": "https://meet-mcp.yuxingzhou.me",
+    "OWNER_NAME": "Tom Zhou",
+    "MS_CLIENT_ID": "a38e81ce-e224-4207-baf4-8971ba94d5f8",
+    "GOOGLE_CLIENT_ID": "1068959887894-rc61gdqc8he7h75dukr4kpdvrs77ul4g.apps.googleusercontent.com"
+  }
+}

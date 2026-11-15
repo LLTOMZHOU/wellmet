@@ -5,6 +5,9 @@
   "description": "Wellmet's public Worker: booking pages, JSON API and the no-login agent endpoint.",
   "dependencies": {
     "@fontsource-variable/inter-tight": "^5.3.0",
-    "@fontsource/ibm-plex-mono": "^5.3.0"
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@wellmet/contracts": "*",
+    "temporal-polyfill": "^1.0.8",
+    "zod": "^4.6.7"
   }
 }

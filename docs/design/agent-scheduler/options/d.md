@@ -98,7 +98,10 @@ Owner endpoint `https://meet-mcp.yuxingzhou.me/mcp`, 14 tools as in Option A:
 |---|---|
 | `get_health` | Connections, Entra secret expiry, last cron run, today's counters, waiting and unfinished bookings, unsent mail, last 50 `log` rows from all three Workers, contract versions |
 | `get_connect_links` | Returns the two `/connect/…` URLs (answered in the owner Worker) |
-| `list_event_types`, `upsert_event_type`, `get_availability` | F2: duration, buffers, minimum notice, window, daily cap, working hours, confirmation mode, questions, location |
+| `list_event_types`, `create_event_type`, `update_event_type`, `duplicate_event_type`, `archive_event_type` | F2. Every setting in "Event type settings" below. `update` changes only the fields given; `create` fills the rest with defaults |
+| `preview_event_type` | The next open times a type would offer, with optional proposed changes applied, without saving |
+| `list_schedules`, `upsert_schedule`, `list_date_overrides`, `set_date_override`, `remove_date_override` | Named weekly hours shared by types, and dated exceptions |
+| `get_availability` | Open times for one type and range, as a visitor would see them |
 | `list_bookings`, `get_booking` | Guest text only inside `guest_supplied` |
 | `decide_booking` | One id runs inline. A list (up to 20 to approve, 50 to decline) or a filter (`created_after`, `event_type`, `source_of`; decline only) does the conditional updates in one batch and leaves the Outlook work to cron |
 | `cancel_booking`, `reschedule_booking` | Outlook is updated to match |
@@ -120,6 +123,29 @@ Anyone can open a `/connect/…` page, but the core stores a token only for the 
 **Why Microsoft for sign-in:** one app registration and one consent instead of two; no second OAuth client; the owner Worker needs no secret at all; and Tom's identity for this system is already his Outlook account. Cost: owner sign-in is tied to Microsoft (see "Hard to reverse").
 
 **Why the authorization server sits in the owner Worker:** the library's single-Worker mode keeps discovery, token endpoint and MCP resource on one origin, which is the shape with the fewest client-side unknowns. A separate sign-in Worker would add a fourth deployable and guard nothing extra here: whoever controls the owner tools already has everything the sign-in server protects.
+
+### Event type settings (revision 3, 2026-11-15)
+
+Tom asked for every kind of meeting to be addable and configurable from his agent. There are no built-in types. Every setting is defined once, as a zod schema in `packages/contracts`; the owner tools' input schemas and descriptions are generated from it and the core validates against the same schema, so a new setting is one schema change.
+
+| Setting | Values | Default |
+|---|---|---|
+| `slug`, `title`, `description` | Page address, name, one paragraph | required, required, empty |
+| `lengths` | 1 to 4 lengths in minutes; the visitor picks one when there are several | `[30]` |
+| `slot_step_min` | How often start times are offered | 30 |
+| `buffer_before_min`, `buffer_after_min` | Kept free around each booking | 0, 0 |
+| `min_notice_min`, `window_days` | Earliest and latest bookable time | 240, 30 |
+| `limits` | `per_day`, `per_week` caps for this type | none |
+| `schedule` | Id of a named schedule | `default` |
+| `confirmation` | `instant` or `approval` | `approval` |
+| `questions` | Up to 10 intake questions, each required or optional, one line or several | none |
+| `location` | `google_meet`; `phone`, where the guest calls Tom's number (there are no types where Tom calls the guest: Tom, 2026-11-15); `in_person` with an address | `google_meet` |
+| `visibility` | `listed` on the event list, or `unlisted`: reachable only by its link | `listed` |
+| `active` | Archived types take no bookings; existing bookings are kept | `true` |
+
+**Schedules** are named weekly hours in an IANA timezone, shared by any number of types. **Date overrides** apply to one date in a schedule's timezone, for all types or listed slugs: `closed` removes the day; `open` with hours replaces that day's hours.
+
+Unlisted types never appear on `/`, in the public `list_event_types`, or in another type's "All open times" list. Phone and in-person types create no Meet room; the event body carries the number or address instead.
 
 ### The copyable line (F5, F6)
 
@@ -307,7 +333,9 @@ All application state is in D1 `scheduler`, bound to the core only. Times are IS
 
 | Table | Key columns | Holds |
 |---|---|---|
-| `event_types` | `slug` PK | Title, description, duration, buffers, minimum notice, window, daily cap, IANA timezone, working hours, confirmation mode, questions, location, active |
+| `event_types` | `slug` PK | `settings` JSON validated by the shared schema (see "Event type settings"), `active`, `visibility`, `updated_at` |
+| `schedules` | `id` PK | Name, IANA timezone, weekly hours JSON |
+| `date_overrides` | `id` PK; index on `date` | Date, schedule id, `scope` (all or a slug list), `kind` (`closed` or `open`), hours JSON |
 | `bookings` | `id` PK (random UUID); unique partial index on `retry_key`; partial indexes on `block_start_utc` for committed and for `pending`; index on `(source_hash, created_at)` | Status, `mode_applied`, reason, start and end, buffered start and end, `local_date`, guest name, email, timezone, answers, `via`, `source_hash`, `retry_key`, `meeting_url`, `calendar_event_id`, `rechecked_at`, `calendar_dirty`, `reschedule_count`, `attempts`, `lease_until`, `alerted_at`, `expires_at`, `decided_by` |
 | `connections` | `provider` PK | Account `sub` and email, encrypted refresh and access tokens, expiry, `status` (`ok`, `failing`, `broken`), `failing_since`, `last_error` |
 | `outbox` | `id` PK; index on `(sent_at, expires_at)` | Kind, booking id, subject, body, `expires_at`, `sent_at`, attempts |

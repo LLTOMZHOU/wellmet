@@ -1,0 +1,51 @@
+{
+  // wellmet-core: no route. Reached only through Service Bindings from
+  // wellmet-public (PublicApi) and wellmet-owner (OwnerApi).
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "wellmet-core",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "placement": { "mode": "smart" },
+  "observability": { "enabled": true },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wellmet",
+      // Filled in by `wrangler d1 create wellmet` at first deploy.
+      "database_id": "f63204ff-f14e-4aa4-bf1d-a96074843b60",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Owner mail. Cloudflare only delivers to addresses verified in Email Routing;
+  // the code sends to OWNER_EMAIL (a secret) only.
+  "send_email": [{ "name": "EMAIL" }],
+
+  "triggers": { "crons": ["* * * * *"] },
+
+  // Ceilings over all visitors together, so a misbehaving public Worker can't flood the database.
+  "ratelimits": [
+    { "name": "RL_PUB_READ_ALL", "namespace_id": "41001", "simple": { "limit": 600, "period": 60 } },
+    { "name": "RL_PUB_WRITE_ALL", "namespace_id": "41002", "simple": { "limit": 30, "period": 60 } }
+  ],
+
+  "vars": {
+    "PUBLIC_URL": "https://meet.yuxingzhou.me",
+    "OWNER_URL": "https://meet-mcp.yuxingzhou.me",
+    "OWNER_NAME": "Tom Zhou",
+    "OWNER_TIMEZONE": "America/Los_Angeles",
+    "MAIL_FROM": "wellmet@yuxingzhou.me",
+    "MS_CLIENT_ID": "a38e81ce-e224-4207-baf4-8971ba94d5f8",
+    "GOOGLE_CLIENT_ID": "1068959887894-rc61gdqc8he7h75dukr4kpdvrs77ul4g.apps.googleusercontent.com",
+    "MS_SECRET_EXPIRES_ON": "2028-11-14"
+  }
+  // Secrets (wrangler secret put), kept out of the repo:
+  //   MASTER_KEY, MS_CLIENT_SECRET, GOOGLE_CLIENT_SECRET
+  //   OWNER_EMAIL             where owner mail goes (verified in Email Routing)
+  //   OWNER_MICROSOFT_LOGINS  comma-separated aliases of the owner's Microsoft account
+  //   OWNER_GOOGLE_EMAIL      the owner's Google account
+}

@@ -316,3 +316,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { box-shadow: 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* --- Length choice -------------------------------------------------------- */
+.lengths { display: flex; gap: 8px; margin-top: 16px; }
+.lengths__item { padding: 8px 14px; border: 2px solid var(--rule); font-weight: 700; text-decoration: none; }
+.lengths__item--current { background: var(--signal); }
+.lengths a.lengths__item:hover { background: var(--wash); }

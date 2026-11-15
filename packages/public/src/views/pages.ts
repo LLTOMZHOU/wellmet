@@ -1,4 +1,4 @@
-import { html, type SafeHtml } from './html.ts';
+import { html, type SafeHtml } from '@wellmet/contracts/html';
 import { page, sheet, topRow } from './layout.ts';
 import type {
   AgentInfo,
@@ -148,11 +148,19 @@ export function renderBooking(input: {
   agent: AgentInfo;
   /** Set when the guest is choosing a new time for an existing booking. */
   rescheduling?: { from: string };
+  /** For types offering several lengths: one link per length. */
+  lengthChoices?: { minutes: number; href: string; current: boolean }[];
 }): string {
+  const lengths = input.lengthChoices && input.lengthChoices.length > 1
+    ? html`<nav class="lengths" aria-label="Meeting length">${input.lengthChoices.map((c) => c.current
+        ? html`<span class="lengths__item lengths__item--current" aria-current="true">${c.minutes} min</span>`
+        : html`<a class="lengths__item" href="${c.href}">${c.minutes} min</a>`)}</nav>`
+    : '';
   const left = html`${topRow(timezoneSwitcher(input.timezone))}
     ${input.rescheduling ? html`<p class="notice">New time for your booking on ${input.rescheduling.from}. Your current time stays booked until you confirm.</p>` : ''}
     ${headline(input.eventType.title, input.host)}
     ${facts(input.eventType, input.host)}
+    ${lengths}
     ${input.eventType.description ? html`<p class="lede">${input.eventType.description}</p>` : ''}
     ${calendar(input.month)}`;
 
@@ -325,4 +333,53 @@ export function renderStatus(input: { host: Host; receipt: BookingReceipt; flash
       : ''}`;
 
   return page({ title: `${STATUS_WORD[r.status].replace('.', '')}: ${r.title}` }, sheet(left, right)).toString();
+}
+
+// ---------------------------------------------------------------------------
+// 5. Confirm moving an existing booking (a link alone never changes anything)
+
+export function renderMoveConfirm(input: { host: Host; title: string; chosen: ChosenSlot; timezone: string; action: string; backHref: string }): string {
+  const left = html`${topRow()}
+    ${headline(input.title, input.host)}
+    <div class="chosen">
+      <p class="eyebrow">New time</p>
+      <p class="chosen__block"><span class="chosen__date">${input.chosen.weekday}, ${input.chosen.date}</span><span class="chosen__time">${input.chosen.timeLine}</span></p>
+      <p class="chosen__tz">Times in ${pretty(input.timezone)}</p>
+      <a class="backlink" href="${input.backHref}">‹ Choose another time</a>
+    </div>`;
+  const right = html`<h2 class="section-title">Move your booking?</h2>
+    <p class="lede">${input.host.name} gets the update, and you'll get a new invite.</p>
+    <form class="form" method="post" action="${input.action}">
+      <input type="hidden" name="start" value="${input.chosen.start}">
+      <div class="form__actions"><button class="button" type="submit">Move booking</button></div>
+    </form>`;
+  return page({ title: `Move: ${input.title}` }, sheet(left, right)).toString();
+}
+
+// ---------------------------------------------------------------------------
+// 6. Privacy (linked from Google's consent screen)
+
+export function renderPrivacy(input: { ownerName: string }): string {
+  const left = html`${topRow()}<h1 class="headline">Privacy</h1>
+    <p class="lede">Wellmet is ${input.ownerName}'s own booking page. It is not a service anyone else signs up for.</p>`;
+  const right = html`<h2 class="section-title">What a booking keeps</h2>
+    <p class="lede">Your name, email, the time you picked, your timezone and any answers you give. They are stored in Cloudflare and shown to ${input.ownerName} only.</p>
+    <h2 class="section-title">Where it goes</h2>
+    <p class="lede">Your name and email go into ${input.ownerName}'s Outlook calendar as the meeting's attendee, so you get an invite. A Google Meet room is created for the meeting; no guest details are sent to Google.</p>
+    <h2 class="section-title">Abuse protection</h2>
+    <p class="lede">To limit abuse, a one-way hash of your network address is kept with each request. The address itself is not stored.</p>
+    <h2 class="section-title">Google and Microsoft access</h2>
+    <p class="lede">Wellmet uses ${input.ownerName}'s own Google account only to create Meet rooms, and the Microsoft account only to read busy times and write meetings to that calendar. Data from Google APIs is used for nothing else, is not shared, and is not used for advertising or to train models.</p>
+    <h2 class="section-title">Removal</h2>
+    <p class="lede">Cancel from your booking link at any time, or write to ${input.ownerName} to have your details removed.</p>`;
+  return page({ title: 'Privacy' }, sheet(left, right)).toString();
+}
+
+// ---------------------------------------------------------------------------
+// 7. Plain message page (not found, try again)
+
+export function renderMessage(input: { title: string; message: string; linkHref?: string; linkText?: string }): string {
+  const left = html`${topRow()}<h1 class="headline">${input.title}</h1>`;
+  const right = html`<p class="lede">${input.message}</p>${input.linkHref ? html`<p><a class="button button--quiet" href="${input.linkHref}">${input.linkText ?? 'Back'}</a></p>` : ''}`;
+  return page({ title: input.title }, sheet(left, right)).toString();
 }

@@ -1,0 +1,11 @@
+{
+  "name": "@wellmet/owner",
+  "private": true,
+  "type": "module",
+  "description": "Wellmet's owner Worker: Tom's sign-in, his MCP tools, and the pages only he sees.",
+  "dependencies": {
+    "@wellmet/contracts": "*",
+    "@cloudflare/workers-oauth-provider": "^1.2.4",
+    "zod": "^4.6.7"
+  }
+}

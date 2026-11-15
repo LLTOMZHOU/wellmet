@@ -8,10 +8,10 @@ A printed Swiss transit timetable: a white sheet split by black rules, bold nume
 ## Brand assets (do not change)
 - Wordmark: "Wellmet" set in Inter Tight bold, top left of every page. No logo graphic. (Agent inferred)
 - Signal yellow `--signal` is the only accent. (User confirmed with direction D)
-- Fonts: Inter Tight for everything; IBM Plex Mono only for copyable code and URLs. Self-hosted from `packages/public/assets/fonts`, never loaded from Google. (Agent inferred)
+- Fonts: Inter Tight for everything; IBM Plex Mono only for copyable code and URLs. Self-hosted from `packages/public/static/assets/fonts`, never loaded from Google. (Agent inferred)
 
 ## Semantic roles
-Variables live in `packages/public/assets/styles.css`; this lists where each role is used.
+Variables live in `packages/public/static/assets/styles.css`; this lists where each role is used.
 - `--signal`: the current selection only: the chosen date, the chosen time, hover on a time, and the one primary action on the receipt. Never decoration, never a background area. (Agent inferred)
 - `--ink`, `--ink-2`, `--ink-3`: text, secondary text, de-emphasised text. `--ink-3` is never body copy. (Agent inferred)
 - `--rule` (2px) separates major regions: the two columns, under the top row, above each section. `--hair` (1px) separates rows inside a region. (Agent inferred)

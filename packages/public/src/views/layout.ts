@@ -1,4 +1,4 @@
-import { html, raw, type SafeHtml } from './html.ts';
+import { html, raw, type SafeHtml } from '@wellmet/contracts/html';
 
 export interface PageOptions {
   title: string;

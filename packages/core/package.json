@@ -1,0 +1,13 @@
+{
+  "name": "@wellmet/core",
+  "private": true,
+  "type": "module",
+  "description": "Wellmet's core Worker: rules, bookings, provider credentials. No public route.",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@wellmet/contracts": "*",
+    "temporal-polyfill": "^1.0.8"
+  }
+}
