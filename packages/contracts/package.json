@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./html": "./src/html.ts",
-    "./mcp": "./src/mcp.ts"
+    "./mcp": "./src/mcp.ts",
+    "./robots": "./src/robots.ts"
   },
   "dependencies": {
     "zod": "^4.6.7"

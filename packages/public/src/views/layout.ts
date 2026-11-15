@@ -1,4 +1,5 @@
 import { html, raw, type SafeHtml } from '@wellmet/contracts/html';
+import { ROBOTS_DIRECTIVES } from '@wellmet/contracts/robots';
 
 export interface PageOptions {
   title: string;
@@ -34,7 +35,7 @@ export function page(options: PageOptions, body: SafeHtml): SafeHtml {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${options.title}</title>
-<meta name="robots" content="noindex">
+<meta name="robots" content="${ROBOTS_DIRECTIVES}">
 <link rel="preload" href="/assets/fonts/inter-tight-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">

@@ -1,5 +1,6 @@
 import { OAuthProvider, getOAuthApi, type OAuthHelpers, type OAuthProviderOptions } from '@cloudflare/workers-oauth-provider';
 import { handleMcp } from '@wellmet/contracts/mcp';
+import { robotsTxt, withNoIndex } from '@wellmet/contracts/robots';
 import { handlePage, OWNER_SCOPE, type PageCore } from './pages.ts';
 import { ownerTools, OWNER_INSTRUCTIONS, type OwnerCore } from './tools.ts';
 
@@ -88,9 +89,10 @@ function options(env: Env): OAuthProviderOptions<Env> {
 let provider: { url: string; instance: OAuthProvider<Env> } | null = null;
 
 export default {
-  fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    if (new URL(request.url).pathname === '/robots.txt') return robotsTxt();
     if (!provider || provider.url !== env.OWNER_URL) provider = { url: env.OWNER_URL, instance: new OAuthProvider<Env>(options(env)) };
-    return provider.instance.fetch(request, env, ctx);
+    return withNoIndex(await provider.instance.fetch(request, env, ctx));
   },
 
   /** Watchdog and cleanup: report a silent core, and prune expired grants daily. */

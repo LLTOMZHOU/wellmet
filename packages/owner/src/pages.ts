@@ -1,5 +1,6 @@
 import { GOOGLE, MICROSOFT, type OwnerBooking, type Result } from '@wellmet/contracts';
 import { html, type SafeHtml } from '@wellmet/contracts/html';
+import { ROBOTS_DIRECTIVES } from '@wellmet/contracts/robots';
 import { AuthorizationError, authorizationErrorRedirect, type OAuthHelpers } from '@cloudflare/workers-oauth-provider';
 
 /**
@@ -65,7 +66,7 @@ function page(title: string, body: SafeHtml, status = 200, extra?: Headers, opti
   headers.set('content-type', 'text/html; charset=utf-8');
   const doc = html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title><meta name="robots" content="noindex"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/owner.css"></head>
+<title>${title}</title><meta name="robots" content="${ROBOTS_DIRECTIVES}"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/owner.css"></head>
 <body><main class="sheet"><p class="wordmark">Wellmet</p>${body}</main></body></html>`;
   return new Response(doc.toString(), { status, headers });
 }
