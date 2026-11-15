@@ -36,6 +36,7 @@ describe('a visitor booking through the pages, with no JavaScript', () => {
     const w = await world();
     const index = await (await w.get('/')).text();
     expect(index).toContain('Intro call');
+    expect(index).toContain('<link rel="icon" href="/favicon.svg"');
     const page = await w.get('/intro?tz=America/Los_Angeles');
     expect(page.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
     const html = await page.text();

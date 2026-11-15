@@ -122,6 +122,15 @@ describe('owner pages', () => {
     expect(body).toContain('method="post"');
   });
 
+  it('serves its favicon and lets pages show it', async () => {
+    const res = await handlePage(new Request('https://meet-mcp.example/favicon.ico'), env());
+    expect(res.headers.get('content-type')).toBe('image/svg+xml');
+    expect(await res.text()).toContain('<polygon');
+    const page = await handlePage(new Request('https://meet-mcp.example/a/b.mac'), env());
+    expect(page.headers.get('content-security-policy')).toContain("img-src 'self'");
+    expect(await page.text()).toContain('rel="icon"');
+  });
+
   it('decides only on POST', async () => {
     const decide = vi.fn(async () => ok({ result: 'approved' }));
     await handlePage(new Request('https://meet-mcp.example/a/b.mac'), env({ decideByLink: decide }));

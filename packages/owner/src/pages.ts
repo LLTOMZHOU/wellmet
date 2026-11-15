@@ -36,7 +36,10 @@ export interface PageEnv {
 
 export const OWNER_SCOPE = 'wellmet:owner';
 
-const CSP = "default-src 'none'; style-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+const CSP = "default-src 'none'; style-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+
+/** Same mark as packages/public/static/favicon.svg (scripts/make-favicon.py). */
+export const FAVICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#ffd400"/><polygon points="6,14 17,14 23,37 28,21 36,21 41,37 47,14 58,14 47,51 37,51 32,34 27,51 17,51" fill="#111111"/></svg>';
 /**
  * Browsers apply form-action to every redirect that follows a form post. The
  * consent form's chain runs through Microsoft (login.microsoftonline.com, then
@@ -62,7 +65,7 @@ function page(title: string, body: SafeHtml, status = 200, extra?: Headers, opti
   headers.set('content-type', 'text/html; charset=utf-8');
   const doc = html`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title}</title><meta name="robots" content="noindex"><link rel="stylesheet" href="/owner.css"></head>
+<title>${title}</title><meta name="robots" content="noindex"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/owner.css"></head>
 <body><main class="sheet"><p class="wordmark">Wellmet</p>${body}</main></body></html>`;
   return new Response(doc.toString(), { status, headers });
 }
@@ -150,6 +153,10 @@ export async function handlePage(request: Request, env: PageEnv): Promise<Respon
 }
 
 async function route(request: Request, env: PageEnv, path: string): Promise<Response> {
+  if (path === '/favicon.svg' || path === '/favicon.ico') {
+    // Browsers ask for /favicon.ico on their own; the SVG answers both.
+    return new Response(FAVICON_SVG, { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' } });
+  }
   if (path === '/owner.css') return new Response(OWNER_CSS, { headers: { 'content-type': 'text/css; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
   if (path === '/healthz') {
     const r = await env.CORE.ping();
