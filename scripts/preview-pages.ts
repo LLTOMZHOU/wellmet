@@ -94,7 +94,7 @@ const receipt = (over: Partial<BookingReceipt>): BookingReceipt => ({
 });
 
 const pages: Record<string, string> = {
-  'index.html': renderIndex({ host, eventTypes: [intro, project, quick] }),
+  'index.html': renderIndex({ host, eventTypes: [intro, project, quick], agent: { copyLine: 'Book a meeting with Tom Zhou: https://meet.yuxingzhou.me lists the kinds of meeting, open times and booking steps, no login needed (MCP: https://meet.yuxingzhou.me/mcp)', mcpUrl: 'https://meet.yuxingzhou.me/mcp', typesUrl: 'https://meet.yuxingzhou.me/api/event-types' } }),
   'intro.html': renderBooking({ host, eventType: intro, month: month(17), selected: dayView(17), upcoming, timezone, agent }),
   'intro-closed-day.html': renderBooking({ host, eventType: intro, month: month(21), selected: dayView(21), upcoming, timezone, agent, nextOpen: { label: 'Monday 23 November', href: '/intro.html' } }),
   'reschedule.html': renderBooking({ host, eventType: intro, month: month(19), selected: dayView(19), upcoming, timezone, agent, rescheduling: { from: 'Tuesday 17 November at 14:30' } }),

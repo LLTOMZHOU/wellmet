@@ -112,23 +112,52 @@ function agentNote(agent: AgentInfo): SafeHtml {
 // ---------------------------------------------------------------------------
 // 1. Event-type list
 
-export function renderIndex(input: { host: Host; eventTypes: EventTypeSummary[] }): string {
-  const left = html`${topRow()}
-    <h1 class="headline headline--index"><span class="headline__second">Book time with</span>${input.host.name}</h1>`;
-  const right = input.eventTypes.length === 0
-    ? html`<p class="empty">There's nothing to book right now. Check back later.</p>`
-    : html`<h2 class="eyebrow">Meetings</h2>
-      <ul class="types">
-        ${input.eventTypes.map((t) => html`<li>
-          <a class="type" href="${t.href}">
-            <span class="type__title">${t.title}</span>
-            <span class="type__meta">${t.durationMin} min · ${t.location} · ${t.mode === 'instant' ? 'Instant' : 'On request'}</span>
-            ${t.description ? html`<span class="type__desc">${t.description}</span>` : ''}
-            <span class="type__go" aria-hidden="true">→</span>
-          </a>
-        </li>`)}
-      </ul>`;
-  return page({ title: `Book time with ${input.host.name}` }, sheet(left, right)).toString();
+export function renderIndex(input: { host: Host; eventTypes: EventTypeSummary[]; agent: { copyLine: string; mcpUrl: string; typesUrl: string } }): string {
+  const count = input.eventTypes.length;
+  // Left: a poster. Who at the top; how it works and the small print at the foot.
+  const left = html`<div class="poster__top">
+      ${topRow()}
+      <h1 class="headline headline--index"><span class="headline__second">Book time with</span>${input.host.name}</h1>
+      <p class="lede">Choose a kind of meeting, then a time that suits you. No account needed.</p>
+    </div>
+    <div class="poster__foot">
+      <ol class="steps" aria-label="How it works">
+        <li><span class="steps__n">01</span>Choose a meeting</li>
+        <li><span class="steps__n">02</span>Pick a time, shown in your time zone</li>
+        <li><span class="steps__n">03</span>Get a calendar invite with the meeting link</li>
+      </ol>
+      <p class="colophon"><a href="/privacy">Privacy</a><span aria-hidden="true">·</span><a href="https://github.com/LLTOMZHOU/wellmet">Wellmet is open source</a></p>
+    </div>`;
+  // Right: the meetings at the top; the assistant route anchored at the foot.
+  const right = count === 0
+    ? html`<div class="poster__top"><h2 class="eyebrow">Meetings</h2><p class="empty">There's nothing to book right now. Check back later.</p></div>`
+    : html`<div class="poster__top">
+        <h2 class="eyebrow eyebrow--count">Meetings<span>${String(count).padStart(2, '0')}</span></h2>
+        <ol class="types">
+          ${input.eventTypes.map((t, i) => html`<li>
+            <a class="type" href="${t.href}">
+              <span class="type__num" aria-hidden="true">${String(i + 1).padStart(2, '0')}</span>
+              <span class="type__title">${t.title}</span>
+              <span class="type__meta">${t.durationMin} min · ${t.location} · ${t.mode === 'instant' ? 'Instant' : 'On request'}</span>
+              ${t.description ? html`<span class="type__desc">${t.description}</span>` : ''}
+              <span class="type__go" aria-hidden="true">→</span>
+            </a>
+          </li>`)}
+        </ol>
+      </div>
+      <aside class="agent agent--foot" aria-labelledby="agent-title">
+        <h2 class="agent__title" id="agent-title">Or ask your assistant</h2>
+        <p>Paste this into Claude, ChatGPT or any assistant that can read web pages. It can find a time and book for you.</p>
+        <div class="copy">
+          <code class="copy__text" id="copy-line">${input.agent.copyLine}</code>
+          <button class="button button--small" type="button" data-copy="copy-line" hidden>Copy</button>
+        </div>
+        <ul class="endpoints">
+          <li><span>MCP</span><code>${input.agent.mcpUrl}</code></li>
+          <li><span>API</span><code>GET ${input.agent.typesUrl}</code></li>
+        </ul>
+      </aside>`;
+  return page({ title: `Book time with ${input.host.name}`, withScript: count > 0 }, sheet(left, right, { tone: 'poster' })).toString();
 }
 
 // ---------------------------------------------------------------------------

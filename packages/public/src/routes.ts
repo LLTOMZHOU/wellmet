@@ -68,6 +68,10 @@ export function shareLine(c: Config, t: PublicEventType): string {
   return `Find a time for a ${t.lengths.join(' or ')}-min ${t.title.toLowerCase()} with ${c.ownerName}: ${c.publicUrl}/${t.slug} (open times and booking steps are on that page, no login; MCP: ${c.publicUrl}/mcp)`;
 }
 
+export function indexShareLine(c: Config): string {
+  return `Book a meeting with ${c.ownerName}: ${c.publicUrl} lists the kinds of meeting, open times and booking steps, no login needed (MCP: ${c.publicUrl}/mcp)`;
+}
+
 // --- Router ----------------------------------------------------------------------------
 
 export async function route(request: Request, deps: RouteDeps): Promise<Response> {
@@ -126,7 +130,12 @@ async function dispatch(request: Request, deps: RouteDeps, path: string, write: 
 async function index(deps: RouteDeps): Promise<Response> {
   const r = await deps.core.listEventTypes();
   if (!r.ok) return htmlResponse(renderMessage({ title: 'Try again shortly', message: r.error.message }), STATUS[r.error.code] ?? 500);
-  return htmlResponse(renderIndex({ host: host(deps.config), eventTypes: r.value.map((t) => summary(t)) }));
+  const c = deps.config;
+  return htmlResponse(renderIndex({
+    host: host(c),
+    eventTypes: r.value.map((t) => summary(t)),
+    agent: { copyLine: indexShareLine(c), mcpUrl: `${c.publicUrl}/mcp`, typesUrl: `${c.publicUrl}/api/event-types` },
+  }));
 }
 
 async function bookingPage(request: Request, deps: RouteDeps, slug: string): Promise<Response> {

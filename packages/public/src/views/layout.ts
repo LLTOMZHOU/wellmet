@@ -10,8 +10,9 @@ export interface PageOptions {
  * Every public page is a two-column sheet split by a 2px rule: `left` holds
  * who and what, `right` holds the thing to act on. Narrow screens stack them.
  */
-export function sheet(left: SafeHtml, right: SafeHtml, options: { tone?: 'plain' | 'wide-left' } = {}): SafeHtml {
-  return html`<div class="sheet${options.tone === 'wide-left' ? ' sheet--wide-left' : ''}">
+export function sheet(left: SafeHtml, right: SafeHtml, options: { tone?: 'plain' | 'wide-left' | 'poster' } = {}): SafeHtml {
+  const tone = options.tone && options.tone !== 'plain' ? ` sheet--${options.tone}` : '';
+  return html`<div class="sheet${tone}">
   <section class="sheet__left">${left}</section>
   <section class="sheet__right">${right}</section>
 </div>`;
