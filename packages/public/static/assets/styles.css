@@ -276,7 +276,6 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { box-shadow: 
 .type:hover .type__num { color: var(--ink); }
 
 .agent--foot { margin-top: 0; }
-.agent--foot .endpoints { margin: 12px 0 0; }
 
 .steps { list-style: none; margin: 0; padding: 0; border-top: 2px solid var(--rule); }
 .steps li {

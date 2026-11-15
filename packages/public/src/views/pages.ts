@@ -112,7 +112,7 @@ function agentNote(agent: AgentInfo): SafeHtml {
 // ---------------------------------------------------------------------------
 // 1. Event-type list
 
-export function renderIndex(input: { host: Host; eventTypes: EventTypeSummary[]; agent: { copyLine: string; mcpUrl: string; typesUrl: string } }): string {
+export function renderIndex(input: { host: Host; eventTypes: EventTypeSummary[]; agent: { copyLine: string } }): string {
   const count = input.eventTypes.length;
   // Left: a poster. Who at the top; how it works and the small print at the foot.
   const left = html`<div class="poster__top">
@@ -152,10 +152,6 @@ export function renderIndex(input: { host: Host; eventTypes: EventTypeSummary[];
           <code class="copy__text" id="copy-line">${input.agent.copyLine}</code>
           <button class="button button--small" type="button" data-copy="copy-line" hidden>Copy</button>
         </div>
-        <ul class="endpoints">
-          <li><span>MCP</span><code>${input.agent.mcpUrl}</code></li>
-          <li><span>API</span><code>GET ${input.agent.typesUrl}</code></li>
-        </ul>
       </aside>`;
   return page({ title: `Book time with ${input.host.name}`, withScript: count > 0 }, sheet(left, right, { tone: 'poster' })).toString();
 }

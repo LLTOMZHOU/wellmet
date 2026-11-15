@@ -134,7 +134,7 @@ async function index(deps: RouteDeps): Promise<Response> {
   return htmlResponse(renderIndex({
     host: host(c),
     eventTypes: r.value.map((t) => summary(t)),
-    agent: { copyLine: indexShareLine(c), mcpUrl: `${c.publicUrl}/mcp`, typesUrl: `${c.publicUrl}/api/event-types` },
+    agent: { copyLine: indexShareLine(c) },
   }));
 }
 
