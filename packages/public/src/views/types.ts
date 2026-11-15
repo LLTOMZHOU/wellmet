@@ -6,8 +6,6 @@
 
 export interface Host {
   name: string;
-  /** One short line under the name, such as a role. Optional. */
-  tagline?: string;
 }
 
 export type ConfirmationMode = 'instant' | 'approval';
@@ -31,21 +29,37 @@ export interface Slot {
   href: string;
 }
 
-export interface Day {
-  /** "Mon" */
-  weekday: string;
-  /** "Apr 21" */
-  monthDay: string;
-  slots: Slot[];
+/** One cell of the month calendar. */
+export interface CalendarDate {
+  day: number;
+  /** Link that shows this date's times; null when nothing can be booked. */
+  href: string | null;
+  /** Open times on this date, for the bar under the number. */
+  openCount: number;
+  state: 'past' | 'closed' | 'open' | 'selected';
 }
 
-export interface Week {
-  /** "Apr 21 – 27" */
+export interface Month {
+  /** "November 2026" */
   label: string;
   prevHref: string | null;
+  prevLabel: string;
   nextHref: string | null;
-  /** Only days with at least one open time. */
-  days: Day[];
+  nextLabel: string;
+  /** Empty cells before the 1st, with weeks starting on Sunday. */
+  leadingBlanks: number;
+  dates: CalendarDate[];
+}
+
+/** A day and its open times. */
+export interface Day {
+  /** "Tuesday" */
+  weekday: string;
+  /** "17 November" */
+  date: string;
+  /** "Tue 17" for compact lists. */
+  short: string;
+  slots: Slot[];
 }
 
 export interface Timezone {
@@ -61,7 +75,6 @@ export interface Timezone {
 export interface AgentInfo {
   /** The one line a visitor copies into their own assistant. */
   copyLine: string;
-  pageUrl: string;
   mcpUrl: string;
   slotsUrl: string;
   bookingsUrl: string;
@@ -77,9 +90,11 @@ export interface Question {
 
 export interface ChosenSlot {
   start: string;
-  /** "Wednesday, April 23" */
-  dateLine: string;
-  /** "14:00 – 14:30" */
+  /** "Tuesday" */
+  weekday: string;
+  /** "17 November" */
+  date: string;
+  /** "14:30 – 15:00" */
   timeLine: string;
 }
 
@@ -89,7 +104,7 @@ export interface FieldValues {
   answers: Record<string, string>;
 }
 
-export type FieldErrors = Partial<Record<'name' | 'email' | string, string>>;
+export type FieldErrors = Partial<Record<string, string>>;
 
 export type BookingStatus = 'pending' | 'confirmed' | 'declined' | 'expired' | 'cancelled';
 
@@ -97,7 +112,8 @@ export interface BookingReceipt {
   status: BookingStatus;
   title: string;
   guestName: string;
-  dateLine: string;
+  weekday: string;
+  date: string;
   timeLine: string;
   timezone: string;
   location: string;
@@ -106,6 +122,6 @@ export interface BookingReceipt {
   cancelAction: string | null;
   rescheduleHref: string | null;
   reschedulesLeft: number;
-  /** For example "Cancelled on April 22". */
+  /** For example "Cancelled on 15 November." */
   note: string | null;
 }
