@@ -1,0 +1,280 @@
+{
+  "system": "agent-first scheduler, option B revision 2 (five isolated Workers on Workers Free; all unit costs 0 on that plan), at the 24-month load in frame.md (L2), all figures assumed",
+  "target_utilization": 0.6,
+  "min_instances": 1,
+  "storage": {
+    "retention_days": 1825,
+    "replication_factor": 1
+  },
+  "unit_costs": {
+    "instance_month": 0,
+    "storage_gb_month": 0,
+    "egress_gb": 0
+  },
+  "workloads": [
+    {
+      "name": "booking page view (F4, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "service_ms": 60,
+      "concurrency_per_instance": 50,
+      "request_bytes": 1000,
+      "response_bytes": 30000,
+      "target_p99_ms": 1000,
+      "hops": [
+        {
+          "name": "visitor network, TLS and Cloudflare edge",
+          "p99_ms": 500
+        },
+        {
+          "name": "sched-public: route, rate-limit check, render HTML",
+          "p99_ms": 30
+        },
+        {
+          "name": "RPC sched-public -> sched-core (PublicApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-core: D1 read of event type",
+          "p99_ms": 150
+        },
+        {
+          "name": "static CSS and JS from Workers assets (parallel)",
+          "p99_ms": 150
+        }
+      ]
+    },
+    {
+      "name": "slot lookup, web and agent (T2, L2)",
+      "daily_requests": 1000,
+      "peak_to_avg": 20,
+      "service_ms": 500,
+      "concurrency_per_instance": 50,
+      "request_bytes": 500,
+      "response_bytes": 5000,
+      "fanout": 2,
+      "target_p99_ms": 1500,
+      "hops": [
+        {
+          "name": "sched-public: route, validate, rate-limit check",
+          "p99_ms": 30
+        },
+        {
+          "name": "RPC sched-public -> sched-core (PublicApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-core: D1 read of slot_cache",
+          "p99_ms": 150
+        },
+        {
+          "name": "RPC sched-core -> sched-vault (CalendarApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-vault: D1 read and decrypt of access token",
+          "p99_ms": 150
+        },
+        {
+          "name": "Microsoft Graph calendarView, up to 2 week buckets in parallel",
+          "p99_ms": 800
+        },
+        {
+          "name": "sched-core: D1 read of bookings and blocks, compute slots, D1 write of slot_cache",
+          "p99_ms": 160
+        }
+      ]
+    },
+    {
+      "name": "booking request (F4, F5, L2)",
+      "daily_requests": 20,
+      "peak_to_avg": 20,
+      "service_ms": 1500,
+      "concurrency_per_instance": 50,
+      "request_bytes": 2000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 3000,
+      "fanout": 2,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "sched-public: route, validate, rate-limit check",
+          "p99_ms": 30
+        },
+        {
+          "name": "RPC sched-public -> sched-core (PublicApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-core: D1 abuse counters, then D1 claim batch (2 round trips)",
+          "p99_ms": 300
+        },
+        {
+          "name": "RPC sched-core -> sched-vault (CalendarApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-vault: D1 read and decrypt of both access tokens (the vault writes nothing)",
+          "p99_ms": 150
+        },
+        {
+          "name": "in parallel: Graph fresh busy check, Google Meet spaces.create (abandoned at 900 ms, link added later)",
+          "p99_ms": 900
+        },
+        {
+          "name": "Graph create event with attendee (sends the invite)",
+          "p99_ms": 1200
+        },
+        {
+          "name": "sched-core: D1 finalize batch (the only write after the claim)",
+          "p99_ms": 150
+        }
+      ]
+    },
+    {
+      "name": "guest cancel or reschedule (F8)",
+      "daily_requests": 5,
+      "peak_to_avg": 10,
+      "service_ms": 1200,
+      "concurrency_per_instance": 50,
+      "request_bytes": 1000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 1000,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "sched-public: route, validate, rate-limit check",
+          "p99_ms": 30
+        },
+        {
+          "name": "RPC sched-public -> sched-core (PublicApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-core: verify manage token, D1 load and claim new cells",
+          "p99_ms": 300
+        },
+        {
+          "name": "RPC sched-core -> sched-vault, token read and decrypt",
+          "p99_ms": 160
+        },
+        {
+          "name": "Graph fresh busy check (reschedule only)",
+          "p99_ms": 900
+        },
+        {
+          "name": "Graph update or cancel event",
+          "p99_ms": 1200
+        },
+        {
+          "name": "sched-core: D1 finalize batch",
+          "p99_ms": 150
+        }
+      ]
+    },
+    {
+      "name": "owner MCP call (F2, F3, L2)",
+      "daily_requests": 200,
+      "peak_to_avg": 10,
+      "service_ms": 300,
+      "concurrency_per_instance": 50,
+      "request_bytes": 2000,
+      "response_bytes": 5000,
+      "stored_bytes_per_request": 500,
+      "fanout": 2,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "sched-mcp: route, parse JSON-RPC",
+          "p99_ms": 30
+        },
+        {
+          "name": "RPC sched-mcp -> sched-auth validateToken, KV read",
+          "p99_ms": 210
+        },
+        {
+          "name": "sched-mcp: tool dispatch, scope check",
+          "p99_ms": 20
+        },
+        {
+          "name": "RPC sched-mcp -> sched-core (OwnerApi); approve: D1 conditional update, then D1 claim-and-decline batch (2 round trips)",
+          "p99_ms": 310
+        },
+        {
+          "name": "RPC sched-core -> sched-vault, token read and decrypt",
+          "p99_ms": 160
+        },
+        {
+          "name": "worst tool (approve_booking): Graph busy check and Meet create in parallel",
+          "p99_ms": 900
+        },
+        {
+          "name": "worst tool: Graph create event",
+          "p99_ms": 1200
+        },
+        {
+          "name": "sched-core: D1 finalize batch",
+          "p99_ms": 150
+        }
+      ]
+    },
+    {
+      "name": "public agent call (F5, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "service_ms": 500,
+      "concurrency_per_instance": 50,
+      "request_bytes": 1000,
+      "response_bytes": 4000,
+      "stored_bytes_per_request": 200,
+      "fanout": 2,
+      "target_p99_ms": 1500,
+      "hops": [
+        {
+          "name": "sched-public: route, MCP or HTTP framing, array-body check, rate-limit check",
+          "p99_ms": 50
+        },
+        {
+          "name": "RPC sched-public -> sched-core (PublicApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-core: D1 read of slot_cache",
+          "p99_ms": 150
+        },
+        {
+          "name": "RPC sched-core -> sched-vault (CalendarApi)",
+          "p99_ms": 10
+        },
+        {
+          "name": "sched-vault: D1 read and decrypt of access token",
+          "p99_ms": 150
+        },
+        {
+          "name": "Microsoft Graph calendarView, up to 2 week buckets in parallel",
+          "p99_ms": 800
+        },
+        {
+          "name": "sched-core: D1 read of bookings and blocks, compute slots, D1 write of slot_cache",
+          "p99_ms": 160
+        }
+      ]
+    },
+    {
+      "name": "abusive flood, refused (S4)",
+      "daily_requests": 10000,
+      "peak_to_avg": 50,
+      "service_ms": 5,
+      "concurrency_per_instance": 50,
+      "request_bytes": 500,
+      "response_bytes": 500,
+      "target_p99_ms": 100,
+      "hops": [
+        {
+          "name": "sched-public: rate-limit binding check and 429, no RPC",
+          "p99_ms": 20
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+{
+  "system": "agent-first scheduler, at the 24-month load in frame.md (L2), all figures assumed",
+  "storage": {
+    "retention_days": 1825,
+    "replication_factor": 1
+  },
+  "workloads": [
+    {
+      "name": "booking page view (F4, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "request_bytes": 1000,
+      "response_bytes": 30000,
+      "service_ms": 5,
+      "concurrency_per_instance": 100,
+      "fanout": 1,
+      "target_p99_ms": 1000,
+      "hops": [
+        {
+          "name": "edge TLS and static asset (no Worker invocation)",
+          "p99_ms": 150
+        },
+        {
+          "name": "event-type details API (Worker and one D1 read, no slots)",
+          "p99_ms": 300
+        }
+      ]
+    },
+    {
+      "name": "slot lookup, web and agent (T2, L2)",
+      "daily_requests": 1000,
+      "peak_to_avg": 20,
+      "request_bytes": 500,
+      "response_bytes": 5000,
+      "service_ms": 60,
+      "concurrency_per_instance": 100,
+      "fanout": 1,
+      "target_p99_ms": 1500,
+      "hops": [
+        {
+          "name": "edge, Worker start, validation",
+          "p99_ms": 30
+        },
+        {
+          "name": "rate-limit binding check",
+          "p99_ms": 10
+        },
+        {
+          "name": "Cache API lookup (60 s)",
+          "p99_ms": 20
+        },
+        {
+          "name": "D1 read on a cache miss: stored busy times and active bookings",
+          "p99_ms": 200
+        },
+        {
+          "name": "slot computation and response",
+          "p99_ms": 20
+        }
+      ]
+    },
+    {
+      "name": "booking request (F4, F5, L2)",
+      "daily_requests": 20,
+      "peak_to_avg": 20,
+      "request_bytes": 2000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 3000,
+      "service_ms": 1800,
+      "concurrency_per_instance": 3,
+      "fanout": 2,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "edge, body cap, validation, rate-limit binding",
+          "p99_ms": 30
+        },
+        {
+          "name": "attempt counter and idempotency lookup (one D1 batch)",
+          "p99_ms": 150
+        },
+        {
+          "name": "Worker to BookingSaga Durable Object (RPC) and watchdog alarm",
+          "p99_ms": 100
+        },
+        {
+          "name": "claim batch (D1 write: booking, slot claims, quota, journal)",
+          "p99_ms": 200
+        },
+        {
+          "name": "Outlook re-check and Meet room create (parallel, Meet cut off at 900 ms)",
+          "p99_ms": 900
+        },
+        {
+          "name": "Outlook create event with transactionId (sends the invite)",
+          "p99_ms": 1100
+        },
+        {
+          "name": "finalize batch (D1 write)",
+          "p99_ms": 200
+        },
+        {
+          "name": "response",
+          "p99_ms": 20
+        }
+      ]
+    },
+    {
+      "name": "guest cancel or reschedule (F8)",
+      "daily_requests": 5,
+      "peak_to_avg": 10,
+      "request_bytes": 1000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 1000,
+      "service_ms": 1500,
+      "concurrency_per_instance": 3,
+      "fanout": 1,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "edge, body cap, validation, rate-limit binding",
+          "p99_ms": 30
+        },
+        {
+          "name": "manage-token MAC check, booking read and change counter (D1)",
+          "p99_ms": 100
+        },
+        {
+          "name": "Worker to BookingSaga Durable Object (RPC) and watchdog alarm",
+          "p99_ms": 100
+        },
+        {
+          "name": "state CAS and new slot claim (D1 write)",
+          "p99_ms": 200
+        },
+        {
+          "name": "Outlook re-check of the new time (reschedule only)",
+          "p99_ms": 900
+        },
+        {
+          "name": "Outlook PATCH or cancel",
+          "p99_ms": 1100
+        },
+        {
+          "name": "finalize batch (D1 write)",
+          "p99_ms": 200
+        }
+      ]
+    },
+    {
+      "name": "owner MCP call (F2, F3, L2)",
+      "daily_requests": 200,
+      "peak_to_avg": 10,
+      "request_bytes": 2000,
+      "response_bytes": 5000,
+      "stored_bytes_per_request": 500,
+      "service_ms": 400,
+      "concurrency_per_instance": 3,
+      "fanout": 2,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "edge and Worker start",
+          "p99_ms": 20
+        },
+        {
+          "name": "access-token validation (KV read, in process)",
+          "p99_ms": 150
+        },
+        {
+          "name": "MCP dispatch",
+          "p99_ms": 30
+        },
+        {
+          "name": "Worker to BookingSaga Durable Object (RPC), tools that act on a booking",
+          "p99_ms": 100
+        },
+        {
+          "name": "D1 batches (two)",
+          "p99_ms": 400
+        },
+        {
+          "name": "Outlook re-check and Meet room create (parallel), approve only",
+          "p99_ms": 900
+        },
+        {
+          "name": "Outlook write, tools that change the calendar",
+          "p99_ms": 1100
+        }
+      ]
+    },
+    {
+      "name": "public agent call (F5, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "request_bytes": 1000,
+      "response_bytes": 4000,
+      "stored_bytes_per_request": 200,
+      "service_ms": 60,
+      "concurrency_per_instance": 100,
+      "fanout": 1,
+      "target_p99_ms": 1500,
+      "hops": [
+        {
+          "name": "edge, Worker start, body cap, MCP or HTTP framing",
+          "p99_ms": 60
+        },
+        {
+          "name": "rate-limit binding check",
+          "p99_ms": 10
+        },
+        {
+          "name": "Cache API lookup (60 s)",
+          "p99_ms": 20
+        },
+        {
+          "name": "D1 read on a cache miss: stored busy times and active bookings",
+          "p99_ms": 200
+        },
+        {
+          "name": "slot computation and response",
+          "p99_ms": 20
+        }
+      ]
+    },
+    {
+      "name": "abusive flood, refused (S4)",
+      "daily_requests": 10000,
+      "peak_to_avg": 50,
+      "request_bytes": 500,
+      "response_bytes": 500,
+      "service_ms": 2,
+      "concurrency_per_instance": 100,
+      "fanout": 1,
+      "target_p99_ms": 100,
+      "hops": [
+        {
+          "name": "edge and Worker start",
+          "p99_ms": 15
+        },
+        {
+          "name": "rate-limit binding check",
+          "p99_ms": 10
+        },
+        {
+          "name": "429 response",
+          "p99_ms": 5
+        }
+      ]
+    }
+  ],
+  "target_utilization": 0.6,
+  "min_instances": 1,
+  "unit_costs": {
+    "instance_month": 0,
+    "storage_gb_month": 0,
+    "egress_gb": 0
+  }
+}

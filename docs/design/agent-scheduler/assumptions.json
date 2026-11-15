@@ -1,0 +1,62 @@
+{
+  "system": "agent-first scheduler, at the 24-month load in frame.md (L2), all figures assumed",
+  "storage": {
+    "retention_days": 1825,
+    "replication_factor": 1
+  },
+  "workloads": [
+    {
+      "name": "booking page view (F4, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "request_bytes": 1000,
+      "response_bytes": 30000
+    },
+    {
+      "name": "slot lookup, web and agent (T2, L2)",
+      "daily_requests": 1000,
+      "peak_to_avg": 20,
+      "request_bytes": 500,
+      "response_bytes": 5000
+    },
+    {
+      "name": "booking request (F4, F5, L2)",
+      "daily_requests": 20,
+      "peak_to_avg": 20,
+      "request_bytes": 2000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 3000
+    },
+    {
+      "name": "guest cancel or reschedule (F8)",
+      "daily_requests": 5,
+      "peak_to_avg": 10,
+      "request_bytes": 1000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 1000
+    },
+    {
+      "name": "owner MCP call (F2, F3, L2)",
+      "daily_requests": 200,
+      "peak_to_avg": 10,
+      "request_bytes": 2000,
+      "response_bytes": 5000,
+      "stored_bytes_per_request": 500
+    },
+    {
+      "name": "public agent call (F5, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "request_bytes": 1000,
+      "response_bytes": 4000,
+      "stored_bytes_per_request": 200
+    },
+    {
+      "name": "abusive flood, refused (S4)",
+      "daily_requests": 10000,
+      "peak_to_avg": 50,
+      "request_bytes": 500,
+      "response_bytes": 500
+    }
+  ]
+}

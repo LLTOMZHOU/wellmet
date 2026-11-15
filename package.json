@@ -1,0 +1,19 @@
+{
+  "name": "wellmet",
+  "private": true,
+  "description": "An agent-first, self-hosted scheduler on Cloudflare Workers.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "preview:pages": "tsx scripts/preview-pages.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}

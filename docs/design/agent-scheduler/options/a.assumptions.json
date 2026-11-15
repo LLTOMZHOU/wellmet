@@ -1,0 +1,259 @@
+{
+  "system": "agent-first scheduler, option A rev 2 (one Worker, one D1, Workers Free plan), at the 24-month load in frame.md (L2), all figures assumed",
+  "target_utilization": 0.6,
+  "min_instances": 1,
+  "storage": {
+    "retention_days": 1825,
+    "replication_factor": 1
+  },
+  "unit_costs": {
+    "instance_month": 0,
+    "storage_gb_month": 0,
+    "egress_gb": 0
+  },
+  "workloads": [
+    {
+      "name": "booking page view (F4, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "request_bytes": 1000,
+      "response_bytes": 30000,
+      "service_ms": 60,
+      "concurrency_per_instance": 10,
+      "fanout": 1,
+      "target_p99_ms": 1000,
+      "hops": [
+        {
+          "name": "client network, TLS and 30 KB transfer (client side of T1)",
+          "p99_ms": 300
+        },
+        {
+          "name": "Worker start, router, RL_READ check",
+          "p99_ms": 30
+        },
+        {
+          "name": "D1 batch read: event type, active bookings, busy snapshot",
+          "p99_ms": 100
+        },
+        {
+          "name": "slot generation and HTML render (CPU)",
+          "p99_ms": 10
+        }
+      ]
+    },
+    {
+      "name": "slot lookup, web and agent (T2, L2)",
+      "daily_requests": 1000,
+      "peak_to_avg": 20,
+      "request_bytes": 500,
+      "response_bytes": 5000,
+      "service_ms": 70,
+      "concurrency_per_instance": 10,
+      "fanout": 1,
+      "target_p99_ms": 1500,
+      "hops": [
+        {
+          "name": "Worker start, router, RL_READ check",
+          "p99_ms": 30
+        },
+        {
+          "name": "D1 batch read: event type, active bookings, busy snapshot",
+          "p99_ms": 100
+        },
+        {
+          "name": "fallback only: inline Graph calendarView when snapshot is over 4 min old",
+          "p99_ms": 900
+        },
+        {
+          "name": "fallback only: D1 write of the new snapshot",
+          "p99_ms": 80
+        },
+        {
+          "name": "slot generation and JSON encode (CPU)",
+          "p99_ms": 10
+        }
+      ]
+    },
+    {
+      "name": "booking request (F4, F5, L2)",
+      "daily_requests": 20,
+      "peak_to_avg": 20,
+      "request_bytes": 2000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 3000,
+      "service_ms": 2000,
+      "concurrency_per_instance": 10,
+      "fanout": 2,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "Worker start, router, RL_WRITE check, body cap",
+          "p99_ms": 30
+        },
+        {
+          "name": "D1 batch read: event type, retry key, provider tokens",
+          "p99_ms": 100
+        },
+        {
+          "name": "D1 conditional insert (slot hold, S5 mode, daily cap, lease)",
+          "p99_ms": 100
+        },
+        {
+          "name": "parallel: Graph calendarView re-check and Meet spaces.create (Meet abandoned at 1,500 ms)",
+          "p99_ms": 1000
+        },
+        {
+          "name": "D1 batch: rechecked_at, meeting_url, decline overlapping waiting requests (commit point)",
+          "p99_ms": 80
+        },
+        {
+          "name": "Graph POST /me/events with transactionId (sends the invite)",
+          "p99_ms": 1300
+        },
+        {
+          "name": "D1 write: confirmed, calendar_event_id",
+          "p99_ms": 80
+        }
+      ]
+    },
+    {
+      "name": "guest cancel or reschedule (F8)",
+      "daily_requests": 5,
+      "peak_to_avg": 10,
+      "request_bytes": 1000,
+      "response_bytes": 2000,
+      "stored_bytes_per_request": 1000,
+      "service_ms": 1500,
+      "concurrency_per_instance": 10,
+      "fanout": 1,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "Worker start, router, RL_WRITE check, link MAC check",
+          "p99_ms": 30
+        },
+        {
+          "name": "D1 read: booking, event type, tokens",
+          "p99_ms": 100
+        },
+        {
+          "name": "reschedule only: fresh Graph calendarView for the new interval",
+          "p99_ms": 1000
+        },
+        {
+          "name": "D1 conditional update (new hold or cancelled, reschedule_count, calendar_dirty=1)",
+          "p99_ms": 100
+        },
+        {
+          "name": "Graph PATCH /me/events/{id} or POST .../cancel",
+          "p99_ms": 1300
+        },
+        {
+          "name": "D1 write: calendar_dirty=0",
+          "p99_ms": 80
+        }
+      ]
+    },
+    {
+      "name": "owner MCP call (F2, F3, L2)",
+      "daily_requests": 200,
+      "peak_to_avg": 10,
+      "request_bytes": 2000,
+      "response_bytes": 5000,
+      "stored_bytes_per_request": 500,
+      "service_ms": 400,
+      "concurrency_per_instance": 10,
+      "fanout": 2,
+      "target_p99_ms": 3000,
+      "hops": [
+        {
+          "name": "Worker start, OAuthProvider token check (OAUTH_KV reads)",
+          "p99_ms": 120
+        },
+        {
+          "name": "createMcpHandler: build server, parse and validate call",
+          "p99_ms": 20
+        },
+        {
+          "name": "D1 read and conditional approval update (R5 gate, lease)",
+          "p99_ms": 200
+        },
+        {
+          "name": "worst tool (decide_booking approve): parallel Graph re-check and Meet create",
+          "p99_ms": 1000
+        },
+        {
+          "name": "D1 batch: rechecked_at, meeting_url, decline overlapping waiting requests",
+          "p99_ms": 80
+        },
+        {
+          "name": "worst tool: Graph POST /me/events",
+          "p99_ms": 1300
+        },
+        {
+          "name": "D1 write: confirmed and log row",
+          "p99_ms": 80
+        }
+      ]
+    },
+    {
+      "name": "public agent call (F5, L2)",
+      "daily_requests": 500,
+      "peak_to_avg": 20,
+      "request_bytes": 1000,
+      "response_bytes": 4000,
+      "stored_bytes_per_request": 200,
+      "service_ms": 100,
+      "concurrency_per_instance": 10,
+      "fanout": 1,
+      "target_p99_ms": 1500,
+      "hops": [
+        {
+          "name": "Worker start, router, RL_READ check",
+          "p99_ms": 30
+        },
+        {
+          "name": "createMcpHandler (public server) or JSON route",
+          "p99_ms": 20
+        },
+        {
+          "name": "D1 batch read",
+          "p99_ms": 100
+        },
+        {
+          "name": "fallback only: inline Graph calendarView when snapshot is over 4 min old",
+          "p99_ms": 900
+        },
+        {
+          "name": "fallback only: D1 write of the new snapshot",
+          "p99_ms": 80
+        },
+        {
+          "name": "slot generation and encode (CPU)",
+          "p99_ms": 10
+        }
+      ]
+    },
+    {
+      "name": "abusive flood, refused (S4)",
+      "daily_requests": 10000,
+      "peak_to_avg": 50,
+      "request_bytes": 500,
+      "response_bytes": 500,
+      "service_ms": 5,
+      "concurrency_per_instance": 10,
+      "fanout": 1,
+      "target_p99_ms": 100,
+      "hops": [
+        {
+          "name": "Worker start and router",
+          "p99_ms": 20
+        },
+        {
+          "name": "RL_READ or RL_WRITE check, 429 response",
+          "p99_ms": 10
+        }
+      ]
+    }
+  ]
+}
