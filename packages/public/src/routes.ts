@@ -221,6 +221,7 @@ async function bookingPage(request: Request, deps: RouteDeps, slug: string): Pro
     const past = Temporal.PlainDate.compare(d, today) < 0;
     return {
       day: d.day,
+      date: d.toString(),
       href: n > 0 && !past ? pageHref({ month: ym.toString(), date: d.toString() }) : null,
       openCount: n,
       state: past ? 'past' : selected && d.equals(selected) ? 'selected' : n > 0 ? 'open' : 'closed',
@@ -258,6 +259,10 @@ async function bookingPage(request: Request, deps: RouteDeps, slug: string): Pro
       dates,
     },
     selected: selected ? dayView(selected) : null,
+    ...(selected ? { selectedKey: selected.toString() } : {}),
+    otherDays: monthDates
+      .filter((d) => Temporal.PlainDate.compare(d, today) >= 0 && (byDate.get(d.toString())?.length ?? 0) > 0)
+      .map((d) => ({ key: d.toString(), view: dayView(d) })),
     upcoming,
     ...(nextOpen ? { nextOpen } : {}),
     timezone: { current: tz, options: TIMEZONE_CHOICES.includes(tz) ? TIMEZONE_CHOICES : [tz, ...TIMEZONE_CHOICES], action: `/${slug}`, hidden: { ...(keep.length ? { length: keep.length } : {}), ...(reschedule ? { reschedule } : {}) } },

@@ -4,6 +4,8 @@ export interface PageOptions {
   title: string;
   /** Adds the copy-button enhancement. Public pages only. */
   withScript?: boolean;
+  /** Adds in-place date switching on booking pages. */
+  withDays?: boolean;
 }
 
 /**
@@ -39,6 +41,7 @@ export function page(options: PageOptions, body: SafeHtml): SafeHtml {
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/assets/styles.css">
 ${options.withScript ? raw('<script src="/assets/copy.js" defer></script>') : ''}
+${options.withDays ? raw('<script src="/assets/days.js" defer></script>') : ''}
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>

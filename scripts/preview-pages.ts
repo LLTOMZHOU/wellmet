@@ -58,6 +58,7 @@ function month(selected: number | null): Month {
     const n = openTimes[d]?.length ?? 0;
     dates.push({
       day: d,
+      date: `2026-11-${String(d).padStart(2, '0')}`,
       href: d >= 15 && n > 0 ? '/intro.html' : null,
       openCount: n,
       state: d < 15 ? 'past' : d === selected ? 'selected' : n > 0 ? 'open' : 'closed',

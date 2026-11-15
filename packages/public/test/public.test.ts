@@ -46,6 +46,17 @@ describe('a visitor booking through the pages, with no JavaScript', () => {
     expect(html).toContain('meet.example/mcp');
   });
 
+  it('puts every open day of the month on the page, so a date click needs no request', async () => {
+    const w = await world();
+    const html = await (await w.get('/intro?tz=America/Los_Angeles')).text();
+    const shown = [...html.matchAll(/<section class="day" data-day="([0-9-]+)"[^>]*?( hidden)?>/g)];
+    expect(shown.length).toBeGreaterThan(3);
+    expect(shown.filter((m) => !m[2])).toHaveLength(1);
+    const linked = [...html.matchAll(/data-date="([0-9-]+)"/g)].map((m) => m[1]);
+    for (const [, key] of shown) expect(linked).toContain(key);
+    expect(html).toContain('/assets/days.js');
+  });
+
   it('books from a time link, then shows the receipt; a second visitor gets nearby times', async () => {
     const w = await world();
     const html = await (await w.get('/intro?tz=America/Los_Angeles')).text();

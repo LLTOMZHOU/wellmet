@@ -64,7 +64,7 @@ function calendar(month: Month): SafeHtml {
       : '';
     const label = d.openCount > 0 ? `${d.day}, ${d.openCount} open` : `${d.day}, nothing open`;
     if (d.href && d.state !== 'past') {
-      return html`<a class="cal__cell cal__cell--${d.state}${weekClass(i)}" href="${d.href}" aria-label="${label}"${d.state === 'selected' ? html` aria-current="date"` : ''}>${d.day}${bar}</a>`;
+      return html`<a class="cal__cell cal__cell--${d.state}${weekClass(i)}" href="${d.href}" data-date="${d.date}" aria-label="${label}"${d.state === 'selected' ? html` aria-current="date"` : ''}>${d.day}${bar}</a>`;
     }
     return html`<span class="cal__cell cal__cell--${d.state}${weekClass(i)}" aria-label="${label}">${d.day}${bar}</span>`;
   });
@@ -165,6 +165,10 @@ export function renderBooking(input: {
   month: Month;
   /** The chosen date and its times; null when the month has nothing open. */
   selected: Day | null;
+  /** Every other open date this month, keyed "2026-11-19". Rendered hidden so a date click needs no request. */
+  otherDays?: { key: string; view: Day }[];
+  /** Key of the selected date, matching `otherDays` keys. */
+  selectedKey?: string;
   /** Every open time in the next days, as plain links (for agents and scanning). */
   upcoming: Day[];
   /** Shown when the selected date has nothing open. */
@@ -190,13 +194,15 @@ export function renderBooking(input: {
     ${calendar(input.month)}`;
 
   const day = input.selected;
+  const openDay = (key: string, view: Day, hidden: boolean) => html`<section class="day" data-day="${key}" aria-labelledby="day-title-${key}"${hidden ? html` hidden` : ''}>
+        <p class="eyebrow">${view.weekday}</p>
+        <h2 class="day__title" id="day-title-${key}" tabindex="-1">${view.date}</h2>
+        <ul class="times">${view.slots.map((s) => timeLink(s))}</ul>
+      </section>`;
+  const others = (input.otherDays ?? []).filter((d) => d.key !== input.selectedKey).map((d) => openDay(d.key, d.view, true));
   const dayBlock = day && day.slots.length
-    ? html`<section class="day" aria-labelledby="day-title">
-        <p class="eyebrow">${day.weekday}</p>
-        <h2 class="day__title" id="day-title">${day.date}</h2>
-        <ul class="times">${day.slots.map((s) => timeLink(s))}</ul>
-      </section>`
-    : html`<section class="day" aria-labelledby="day-title">
+    ? html`${openDay(input.selectedKey ?? 'selected', day, false)}${others}`
+    : html`${others}<section class="day" data-day="${input.selectedKey ?? 'none'}" aria-labelledby="day-title">
         <p class="eyebrow">${day ? day.weekday : input.month.label}</p>
         <h2 class="day__title" id="day-title">${day ? day.date : 'Nothing open'}</h2>
         <p class="empty">Nothing is open ${day ? 'on this date' : 'this month'}.${input.nextOpen ? html` <a href="${input.nextOpen.href}">Next open: ${input.nextOpen.label} →</a>` : ''}</p>
@@ -217,7 +223,7 @@ export function renderBooking(input: {
   const right = html`${dayBlock}${upcoming}${input.rescheduling ? '' : agentNote(input.agent)}`;
 
   return page(
-    { title: `${input.eventType.title} with ${input.host.name}`, withScript: true },
+    { title: `${input.eventType.title} with ${input.host.name}`, withScript: true, withDays: true },
     sheet(left, right),
   ).toString();
 }

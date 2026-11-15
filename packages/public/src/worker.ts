@@ -1,4 +1,5 @@
 import { route } from './routes.ts';
+import { DEFAULT_OPTIONS, serveWithCache, type EdgeCache } from './edge-cache.ts';
 import type { PublicCore } from './core.ts';
 
 /**
@@ -20,12 +21,14 @@ interface Env {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    return route(request, {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const render = (r: Request) => route(r, {
       core: env.CORE,
       config: { publicUrl: env.PUBLIC_URL, ownerName: env.OWNER_NAME },
       limitRead: async (key) => (await env.RL_READ.limit({ key })).success,
       limitWrite: async (key) => (await env.RL_WRITE.limit({ key })).success,
     });
+    // Read-only pages come from Cloudflare's cache here, refreshed in the background (edge-cache.ts).
+    return serveWithCache(request, caches.default as unknown as EdgeCache, (p) => ctx.waitUntil(p), render, { ...DEFAULT_OPTIONS, now: Date.now });
   },
 };

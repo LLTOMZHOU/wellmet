@@ -32,6 +32,8 @@ export interface Slot {
 /** One cell of the month calendar. */
 export interface CalendarDate {
   day: number;
+  /** "2026-11-19": ties the calendar cell to its day's times on the page. */
+  date: string;
   /** Link that shows this date's times; null when nothing can be booked. */
   href: string | null;
   /** Open times on this date, for the bar under the number. */
