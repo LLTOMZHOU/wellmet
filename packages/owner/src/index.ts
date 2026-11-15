@@ -1,8 +1,8 @@
 import { OAuthProvider, getOAuthApi, type OAuthHelpers, type OAuthProviderOptions } from '@cloudflare/workers-oauth-provider';
-import { handleMcp } from '@wellmet/contracts/mcp';
+import { serveMcp } from '@wellmet/contracts/mcp';
 import { robotsTxt, withNoIndex } from '@wellmet/contracts/robots';
 import { handlePage, OWNER_SCOPE, type PageCore } from './pages.ts';
-import { ownerTools, OWNER_INSTRUCTIONS, type OwnerCore } from './tools.ts';
+import { ownerServer, type OwnerCore } from './tools.ts';
 
 /**
  * wellmet-owner at meet-mcp.<domain>: the OAuth authorization server and the
@@ -22,11 +22,10 @@ export interface Env {
   RL_OWNER: RateLimit;
   OWNER_URL: string;
   OWNER_NAME: string;
+  OWNER_TIMEZONE: string;
   MS_CLIENT_ID: string;
   GOOGLE_CLIENT_ID: string;
 }
-
-const SERVER = { name: 'wellmet-owner', title: 'Wellmet (owner)', version: '1.0.0', instructions: OWNER_INSTRUCTIONS };
 
 function options(env: Env): OAuthProviderOptions<Env> {
   return {
@@ -35,7 +34,8 @@ function options(env: Env): OAuthProviderOptions<Env> {
       async fetch(request: Request, env: Env, ctx: ExecutionContext) {
         const props = ctx.props as { owner?: boolean } | undefined;
         if (props?.owner !== true) return new Response('Forbidden', { status: 403 });
-        const tools = ownerTools(env.CORE, {
+        const local = {
+          timezone: env.OWNER_TIMEZONE,
           connectLinks: () => ({ outlook: `${env.OWNER_URL}/connect/microsoft`, google_meet: `${env.OWNER_URL}/connect/google` }),
           revokeAllAccess: async () => {
             const oauth = getOAuthApi(options(env), env);
@@ -51,11 +51,9 @@ function options(env: Env): OAuthProviderOptions<Env> {
             } while (cursor);
             return { revoked };
           },
-        });
-        return handleMcp(request, SERVER, tools, {
-          maxBodyBytes: 64 * 1024,
-          onError: (err) => ctx.waitUntil(env.CORE.reportError('owner_tool', String(err))),
-        });
+        };
+        const logError = (err: unknown) => ctx.waitUntil(env.CORE.reportError('owner_tool', String(err)));
+        return serveMcp(request, () => ownerServer(env.CORE, local, logError), { maxBodyBytes: 64 * 1024, onError: logError });
       },
     },
     defaultHandler: {

@@ -27,7 +27,7 @@ Each page carries one line to hand to an assistant, for example:
 
 No sign-in is needed. Assistants can use either interface.
 
-**MCP** at `/mcp` has three tools: `list_event_types`, `find_slots` and `request_booking`.
+**MCP** at `/mcp` has three tools: `list_event_types`, `find_slots` and `request_booking`. Both MCP endpoints use the official TypeScript SDK and speak the 2026-07-28 revision, falling back to the 2025 `initialize` handshake for older clients. A client that can show forms asks the guest to confirm their own name, email and answers before anything is booked.
 
 **HTTP API:**
 

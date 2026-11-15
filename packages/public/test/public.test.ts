@@ -4,6 +4,7 @@ import { publicApi } from '../../core/src/api.ts';
 import { createEventType } from '../../core/src/catalog.ts';
 import { at, setup } from '../../core/test/support/fakes.ts';
 import type { PublicCore } from '../src/core.ts';
+import { CAN_ASK, mcpClient } from '../../../test-support/mcp-client.ts';
 
 const BASE = 'https://meet.example';
 const headers = { 'cf-connecting-ip': '203.0.113.7' };
@@ -168,18 +169,94 @@ describe('the JSON API', () => {
 });
 
 describe('the no-login agent endpoint', () => {
-  const rpc = (method: string, params?: unknown) => ({ jsonrpc: '2.0', id: 1, method, ...(params ? { params } : {}) });
+  const agent = (w: Awaited<ReturnType<typeof world>>) => mcpClient(`${BASE}/mcp`, (r) => route(r, w.deps), headers);
+  const firstSlot = async (c: ReturnType<typeof agent>, type = 'intro') =>
+    (await c.legacy('tools/call', { name: 'find_slots', arguments: { event_type: type, timezone: 'Asia/Tokyo' } })).body.result.structuredContent.slots[0].start as string;
 
-  it('offers three tools and books through them', async () => {
+  it('offers three tools and books through them (2025 clients)', async () => {
     const w = await world();
-    const list = (await (await w.postJson('/mcp', rpc('tools/list'))).json()) as { result: { tools: { name: string }[] } };
-    expect(list.result.tools.map((t) => t.name)).toEqual(['list_event_types', 'find_slots', 'request_booking']);
-    const found = (await (await w.postJson('/mcp', rpc('tools/call', { name: 'find_slots', arguments: { event_type: 'intro', timezone: 'Asia/Tokyo' } }))).json()) as { result: { structuredContent: { slots: { start: string }[] } } };
-    const start = found.result.structuredContent.slots[0]!.start;
-    const booked = (await (await w.postJson('/mcp', rpc('tools/call', { name: 'request_booking', arguments: { event_type: 'intro', start, name: 'Agent', email: 'a@example.com', timezone: 'Asia/Tokyo', retry_token: 'mcp-token-1' } }))).json()) as { result: { isError: boolean; structuredContent: { outcome: string; manage_url: string } } };
-    expect(booked.result.isError).toBe(false);
-    expect(booked.result.structuredContent.outcome).toBe('confirmed');
-    expect(booked.result.structuredContent.manage_url).toMatch(/^https:\/\/meet\.example\/b\//);
+    const c = agent(w);
+    const list = await c.legacy('tools/list');
+    expect(list.body.result.tools.map((t: { name: string }) => t.name)).toEqual(['list_event_types', 'find_slots', 'request_booking']);
+    const start = await firstSlot(c);
+    const booked = await c.legacy('tools/call', { name: 'request_booking', arguments: { event_type: 'intro', start, name: 'Agent', email: 'a@example.com', timezone: 'Asia/Tokyo', retry_token: 'mcp-token-1' } });
+    expect(booked.body.result.isError).toBe(false);
+    expect(booked.body.result.structuredContent.outcome).toBe('confirmed');
+    expect(booked.body.result.structuredContent.manage_url).toMatch(/^https:\/\/meet\.example\/b\//);
+  });
+
+  it('still needs a name and email from clients that cannot ask the guest', async () => {
+    const w = await world();
+    const c = agent(w);
+    const r = await c.legacy('tools/call', { name: 'request_booking', arguments: { event_type: 'intro', start: await firstSlot(c), timezone: 'Asia/Tokyo', retry_token: 'mcp-token-2' } });
+    expect(r.body.result.isError).toBe(true);
+    expect(r.body.result.content[0].text).toMatch(/name/i);
+  });
+
+  it('asks the guest to confirm their own details when the client can show a form', async () => {
+    const w = await world();
+    const c = agent(w);
+    const start = await firstSlot(c);
+    const args = { event_type: 'intro', start, timezone: 'Asia/Tokyo', retry_token: 'mcp-token-3', name: 'Made Up' };
+
+    const ask = await c.modern('tools/call', { name: 'request_booking', arguments: args }, CAN_ASK);
+    expect(ask.body.result.resultType).toBe('input_required');
+    const form = ask.body.result.inputRequests.guest.params;
+    expect(form.mode).toBe('form');
+    expect(form.message).toMatch(/^Book "Intro call" with Tom Zhou on .+\? Check your details\.$/);
+    expect(form.requestedSchema.required).toEqual(['name', 'email']);
+    expect(form.requestedSchema.properties.name.default).toBe('Made Up');
+    expect(form.requestedSchema.properties.email.format).toBe('email');
+
+    const declined = await c.modern('tools/call', { name: 'request_booking', arguments: args, inputResponses: { guest: { action: 'decline' } } }, CAN_ASK);
+    expect(declined.body.result.structuredContent.outcome).toBe('not_booked');
+
+    const done = await c.modern('tools/call', { name: 'request_booking', arguments: args, inputResponses: { guest: { action: 'accept', content: { name: 'Ada Lovelace', email: 'ada@example.com' } } } }, CAN_ASK);
+    expect(done.body.result.structuredContent.outcome).toBe('confirmed');
+    const token = String(done.body.result.structuredContent.manage_url).split('/b/')[1]!;
+    const booking = await w.deps.core.getBooking(token);
+    expect(booking.ok && booking.value).toMatchObject({ guest_name: 'Ada Lovelace' });
+  });
+
+  it('puts the intake questions on the guest form and saves the answers', async () => {
+    const w = await world();
+    await createEventType(w.db, w.clock.now(), {
+      slug: 'advice', title: 'Advice', confirmation: 'instant', min_notice_min: 0,
+      questions: [{ id: 'topic', label: 'What would you like to talk about?', required: true }, { id: 'link', label: 'Anything to read first?' }],
+    });
+    const c = agent(w);
+    const args = { event_type: 'advice', start: await firstSlot(c, 'advice'), timezone: 'Asia/Tokyo', retry_token: 'mcp-token-5', answers: { link: 'https://example.com/deck' } };
+    const ask = await c.modern('tools/call', { name: 'request_booking', arguments: args }, CAN_ASK);
+    const schema = ask.body.result.inputRequests.guest.params.requestedSchema;
+    expect(schema.required).toEqual(['name', 'email', 'q_topic']);
+    expect(schema.properties.q_topic.title).toBe('What would you like to talk about?');
+    expect(schema.properties.q_link.default).toBe('https://example.com/deck');
+
+    const done = await c.modern('tools/call', {
+      name: 'request_booking', arguments: args,
+      inputResponses: { guest: { action: 'accept', content: { name: 'Ada', email: 'ada@example.com', q_topic: 'Scheduling agents' } } },
+    }, CAN_ASK);
+    expect(done.body.result.structuredContent.outcome).toBe('confirmed');
+    const row = await w.db.prepare('SELECT answers FROM bookings WHERE guest_email = ?').bind('ada@example.com').first<{ answers: string }>();
+    expect(JSON.parse(row!.answers)).toEqual({ link: 'https://example.com/deck', topic: 'Scheduling agents' });
+  });
+
+  it('asks again when the form comes back invalid', async () => {
+    const w = await world();
+    const c = agent(w);
+    const args = { event_type: 'intro', start: await firstSlot(c), timezone: 'Asia/Tokyo', retry_token: 'mcp-token-4' };
+    const bad = await c.modern('tools/call', { name: 'request_booking', arguments: args, inputResponses: { guest: { action: 'accept', content: { name: 'Ada', email: 'not-an-email' } } } }, CAN_ASK);
+    expect(bad.body.result.resultType).toBe('input_required');
+  });
+
+  it('answers server/discover and refuses batches', async () => {
+    const w = await world();
+    const c = agent(w);
+    const d = await c.modern('server/discover');
+    expect(d.body.result.supportedVersions).toContain('2026-07-28');
+    expect(d.body.result.instructions).toMatch(/Book time with Tom Zhou/);
+    const call = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
+    expect((await c.raw([call, { ...call, id: 2 }], {})).status).toBe(400);
   });
 
   it('publishes no sign-in metadata, so no client prompts a login', async () => {

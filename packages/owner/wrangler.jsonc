@@ -20,6 +20,7 @@
   "vars": {
     "OWNER_URL": "https://meet-mcp.yuxingzhou.me",
     "OWNER_NAME": "Tom Zhou",
+    "OWNER_TIMEZONE": "America/Los_Angeles",
     "MS_CLIENT_ID": "a38e81ce-e224-4207-baf4-8971ba94d5f8",
     "GOOGLE_CLIENT_ID": "1068959887894-rc61gdqc8he7h75dukr4kpdvrs77ul4g.apps.googleusercontent.com"
   }

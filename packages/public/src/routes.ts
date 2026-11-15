@@ -1,11 +1,11 @@
 import { Temporal } from 'temporal-polyfill';
 import type { Caller, GuestBooking, PublicEventType, PublicSlot, Result } from '@wellmet/contracts';
-import { handleMcp } from '@wellmet/contracts/mcp';
+import { serveMcp } from '@wellmet/contracts/mcp';
 import { renderBooking, renderConfirm, renderIndex, renderMessage, renderMoveConfirm, renderPrivacy, renderStatus } from './views/pages.ts';
 import type { BookingReceipt, CalendarDate, Day, EventTypeSummary, FieldErrors, Slot } from './views/types.ts';
 import { STATUS, type Config, type PublicCore } from './core.ts';
 import { TIMEZONE_CHOICES, dayMonth, hhmm, isoWithOffset, monthBounds, monthLabel, monthShort, validTimeZone, weekdayLong, weekdayShort, zoned } from './time.ts';
-import { publicTools, PUBLIC_INSTRUCTIONS } from './agent.ts';
+import { publicServer } from './agent.ts';
 
 /**
  * wellmet-public's routes. No store, no secret: every answer comes from the
@@ -104,8 +104,9 @@ async function dispatch(request: Request, deps: RouteDeps, path: string, write: 
     return json({ public: 'ok', core: r.ok ? r.value : r.error }, r.ok ? 200 : 503);
   }
   if (path === '/mcp') {
-    return handleMcp(request, { name: 'wellmet-public', title: `Book time with ${deps.config.ownerName}`, version: '1.0.0', instructions: PUBLIC_INSTRUCTIONS(deps.config) },
-      publicTools(deps.core, deps.config, callerOf(request, 'mcp')), { maxBodyBytes: 16 * 1024 });
+    const caller = callerOf(request, 'mcp');
+    const logError = (err: unknown) => void deps.core.reportError('public_mcp', String(err)).catch(() => undefined);
+    return serveMcp(request, () => publicServer(deps.core, deps.config, caller, logError), { maxBodyBytes: 16 * 1024, onError: logError });
   }
   if (path.startsWith('/api/')) return api(request, path, deps);
   if (path === '/') return index(deps);
