@@ -80,6 +80,8 @@ export interface AgentInfo {
   mcpUrl: string;
   slotsUrl: string;
   bookingsUrl: string;
+  /** The OpenAPI description of the JSON API. */
+  openapiUrl: string;
   slug: string;
 }
 

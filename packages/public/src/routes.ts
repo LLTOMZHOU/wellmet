@@ -6,6 +6,7 @@ import type { BookingReceipt, CalendarDate, Day, EventTypeSummary, FieldErrors, 
 import { STATUS, type Config, type PublicCore } from './core.ts';
 import { TIMEZONE_CHOICES, dayMonth, hhmm, isoWithOffset, monthBounds, monthLabel, monthShort, validTimeZone, weekdayLong, weekdayShort, zoned } from './time.ts';
 import { publicServer } from './agent.ts';
+import { openApiDocument, serveApi } from './api.ts';
 
 /**
  * wellmet-public's routes. No store, no secret: every answer comes from the
@@ -35,10 +36,6 @@ const PAGE_HEADERS: Record<string, string> = {
 const htmlResponse = (body: string, status = 200) => new Response(body, { status, headers: PAGE_HEADERS });
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { 'cache-control': 'no-store', 'access-control-allow-origin': '*' } });
 const see = (location: string) => new Response(null, { status: 303, headers: { location, 'cache-control': 'no-store' } });
-
-function apiError(r: Extract<Result<unknown>, { ok: false }>) {
-  return json({ error: r.error }, STATUS[r.error.code] ?? 500);
-}
 
 export function callerOf(request: Request, via: Caller['via']): Caller {
   return { address: request.headers.get('cf-connecting-ip') ?? 'unknown', via };
@@ -108,7 +105,10 @@ async function dispatch(request: Request, deps: RouteDeps, path: string, write: 
     const logError = (err: unknown) => void deps.core.reportError('public_mcp', String(err)).catch(() => undefined);
     return serveMcp(request, () => publicServer(deps.core, deps.config, caller, logError), { maxBodyBytes: 16 * 1024, onError: logError });
   }
-  if (path.startsWith('/api/')) return api(request, path, deps);
+  if (path.startsWith('/api/')) return serveApi(request, path, { core: deps.core, config: deps.config, caller: (via) => callerOf(request, via) });
+  if (path === '/openapi.json') {
+    return Response.json(openApiDocument(deps.config), { headers: { 'cache-control': 'public, max-age=300', 'access-control-allow-origin': '*' } });
+  }
   if (path === '/') return index(deps);
   if (path === '/privacy') return htmlResponse(renderPrivacy({ ownerName: deps.config.ownerName }));
 
@@ -267,7 +267,7 @@ async function bookingPage(request: Request, deps: RouteDeps, slug: string): Pro
     upcoming,
     ...(nextOpen ? { nextOpen } : {}),
     timezone: { current: tz, options: TIMEZONE_CHOICES.includes(tz) ? TIMEZONE_CHOICES : [tz, ...TIMEZONE_CHOICES], action: `/${slug}`, hidden: { ...(keep.length ? { length: keep.length } : {}), ...(reschedule ? { reschedule } : {}) } },
-    agent: { copyLine: shareLine(deps.config, t), mcpUrl: `${deps.config.publicUrl}/mcp`, slotsUrl: `${deps.config.publicUrl}/api/slots`, bookingsUrl: `${deps.config.publicUrl}/api/bookings`, slug },
+    agent: { copyLine: shareLine(deps.config, t), mcpUrl: `${deps.config.publicUrl}/mcp`, slotsUrl: `${deps.config.publicUrl}/api/slots`, bookingsUrl: `${deps.config.publicUrl}/api/bookings`, openapiUrl: `${deps.config.publicUrl}/openapi.json`, slug },
     ...(rescheduling ? { rescheduling } : {}),
     ...(t.lengths.length > 1 ? { lengthChoices: t.lengths.map((m) => ({ minutes: m, current: m === lengthMin, href: `/${slug}?${new URLSearchParams({ ...(m !== t.lengths[0] ? { length: String(m) } : {}), ...(reschedule ? { reschedule } : {}), ...(keep.tz ? { tz } : {}) })}` })) } : {}),
   }));
@@ -420,58 +420,4 @@ async function moveDo(request: Request, deps: RouteDeps, token: string): Promise
   return see(`/b/${token}`);
 }
 
-// --- JSON API ----------------------------------------------------------------------------
-
-async function api(request: Request, path: string, deps: RouteDeps): Promise<Response> {
-  const url = new URL(request.url);
-  const write = request.method === 'POST';
-  if (path === '/api/event-types' && !write) {
-    const r = await deps.core.listEventTypes();
-    return r.ok ? json({ event_types: r.value.map((t) => ({ ...t, page_url: `${deps.config.publicUrl}/${t.slug}` })) }) : apiError(r);
-  }
-  if (path === '/api/slots' && !write) {
-    const slug = url.searchParams.get('type') ?? url.searchParams.get('event_type') ?? '';
-    const now = Date.now();
-    const from = url.searchParams.get('from') ?? new Date(now).toISOString();
-    const to = url.searchParams.get('to') ?? new Date(Date.parse(from) + 7 * DAY).toISOString();
-    const tz = url.searchParams.get('tz');
-    const length = Number(url.searchParams.get('length') ?? url.searchParams.get('length_min'));
-    const r = await deps.core.findSlots(slug, from, to, length || undefined);
-    if (!r.ok) return apiError(r);
-    return json({
-      event_type: slug,
-      timezone: validTimeZone(tz) ? tz : 'UTC',
-      slots: r.value.map((s) => ({ ...s, ...(validTimeZone(tz) ? { local: isoWithOffset(zoned(s.start, tz)) } : {}) })),
-    });
-  }
-  if (path === '/api/bookings' && write) {
-    let body: unknown;
-    try {
-      body = await request.json();
-    } catch {
-      return json({ error: { code: 'invalid_input', message: 'Send a JSON body.' } }, 400);
-    }
-    const r = await deps.core.requestBooking(body, callerOf(request, 'api'));
-    return r.ok ? json(r.value, r.value.outcome === 'pending' ? 202 : 201) : apiError(r);
-  }
-  const one = path.match(/^\/api\/bookings\/([A-Za-z0-9-]+\.[A-Za-z0-9_-]+)(\/cancel|\/reschedule)?$/);
-  if (one) {
-    const [, token, action] = one as unknown as [string, string, string | undefined];
-    if (!action && !write) {
-      const r = await deps.core.getBooking(token);
-      return r.ok ? json(r.value) : apiError(r);
-    }
-    if (action === '/cancel' && write) {
-      const body = (await request.json().catch(() => ({}))) as { reason?: string };
-      const r = await deps.core.cancelBooking(token, body.reason);
-      return r.ok ? json(r.value) : apiError(r);
-    }
-    if (action === '/reschedule' && write) {
-      const body = (await request.json().catch(() => ({}))) as { start?: string };
-      const r = await deps.core.rescheduleBooking(token, String(body.start ?? ''));
-      return r.ok ? json(r.value) : apiError(r);
-    }
-  }
-  return json({ error: { code: 'not_found', message: 'No such API route. See GET /api/event-types, GET /api/slots, POST /api/bookings.' } }, 404);
-}
 

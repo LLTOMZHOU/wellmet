@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 /**
  * Shapes passed between the Workers over Service Bindings. Errors travel as
  * values, not exceptions, so the code and details survive the hop.
@@ -17,50 +19,67 @@ export interface Caller {
   via: 'web' | 'api' | 'mcp';
 }
 
-export interface PublicEventType {
-  slug: string;
-  title: string;
-  description: string;
-  lengths: number[];
-  location: { kind: 'google_meet' | 'phone' | 'in_person'; label: string };
-  confirmation: 'instant' | 'approval';
-  questions: { id: string; label: string; required: boolean; multiline: boolean }[];
-  /** The schedule's timezone, for "times are set in …". */
-  timezone: string;
-  window_days: number;
-}
+/*
+ * What the public interface returns. Defined as zod schemas so the same
+ * definitions give the TypeScript types the core is checked against, and the
+ * JSON Schema published in the public Worker's /openapi.json and as MCP
+ * output schemas.
+ */
 
-export interface PublicSlot {
-  /** ISO-8601 UTC. Send it back unchanged as `start`. */
-  start: string;
-  end: string;
-}
+const Iso = (what: string) => z.string().describe(`${what}, ISO-8601.`);
 
-export interface RequestResult {
-  outcome: 'confirmed' | 'accepted' | 'pending';
-  /** "id.mac": the guest's key to view, cancel or move this booking. */
-  booking_token: string;
-  manage_url: string;
-  /** True when this was a repeat of an earlier call with the same retry_token. */
-  repeated: boolean;
-}
+export const PublicEventType = z.object({
+  slug: z.string().describe('The meeting type\'s id, used in its page address and in every call.'),
+  title: z.string(),
+  description: z.string(),
+  lengths: z.array(z.number().int()).describe('Offered lengths in minutes; the first is the default.'),
+  location: z.object({
+    kind: z.enum(['google_meet', 'phone', 'in_person']),
+    label: z.string().describe('Shown to the guest, for example "Google Meet".'),
+  }),
+  confirmation: z.enum(['instant', 'approval']).describe('"instant" books straight away; "approval" waits for the host.'),
+  questions: z.array(z.object({
+    id: z.string().describe('Key for this question\'s answer in "answers".'),
+    label: z.string(),
+    required: z.boolean(),
+    multiline: z.boolean(),
+  })).describe('Intake questions; answer them in "answers" when booking.'),
+  timezone: z.string().describe('The schedule\'s IANA timezone.'),
+  window_days: z.number().int().describe('How many days ahead can be booked.'),
+});
+export type PublicEventType = z.infer<typeof PublicEventType>;
 
-export interface GuestBooking {
-  id: string;
-  status: 'pending' | 'accepted' | 'confirmed' | 'declined' | 'expired' | 'cancelled' | 'failed';
-  event_type: string;
-  title: string;
-  start: string;
-  end: string;
-  guest_name: string;
-  guest_timezone: string;
-  location: string;
-  meeting_url: string | null;
-  can_cancel: boolean;
-  can_reschedule: boolean;
-  reschedules_left: number;
-  updated_at: string;
-}
+export const PublicSlot = z.object({
+  start: Iso('Start in UTC').describe('Start in UTC, ISO-8601. Send it back unchanged as "start".'),
+  end: Iso('End in UTC'),
+});
+export type PublicSlot = z.infer<typeof PublicSlot>;
+
+export const RequestResult = z.object({
+  outcome: z.enum(['confirmed', 'accepted', 'pending']).describe('"pending" waits for the host\'s approval; the others hold the time.'),
+  booking_token: z.string().describe('The guest\'s key to view, cancel or move this booking. Keep it private.'),
+  manage_url: z.string().describe('The guest\'s page for this booking.'),
+  repeated: z.boolean().describe('True when this repeated an earlier call with the same retry_token; nothing new was booked.'),
+});
+export type RequestResult = z.infer<typeof RequestResult>;
+
+export const GuestBooking = z.object({
+  id: z.string(),
+  status: z.enum(['pending', 'accepted', 'confirmed', 'declined', 'expired', 'cancelled', 'failed']),
+  event_type: z.string(),
+  title: z.string(),
+  start: Iso('Start in UTC'),
+  end: Iso('End in UTC'),
+  guest_name: z.string(),
+  guest_timezone: z.string(),
+  location: z.string(),
+  meeting_url: z.string().nullable().describe('The video link, once there is one.'),
+  can_cancel: z.boolean(),
+  can_reschedule: z.boolean(),
+  reschedules_left: z.number().int(),
+  updated_at: Iso('Last change'),
+});
+export type GuestBooking = z.infer<typeof GuestBooking>;
 
 export interface OwnerBooking {
   id: string;

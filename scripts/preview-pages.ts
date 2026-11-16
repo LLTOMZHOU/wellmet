@@ -80,7 +80,7 @@ const agent = {
   copyLine: `Find a time for a 30-min intro call with Tom Zhou: ${base}/intro (open times and booking steps are on that page, no login; MCP: ${base}/mcp)`,
   mcpUrl: `${base}/mcp`,
   slotsUrl: `${base}/api/slots`,
-  bookingsUrl: `${base}/api/bookings`,
+  bookingsUrl: `${base}/api/bookings`, openapiUrl: `${base}/openapi.json`,
   slug: 'intro',
 };
 

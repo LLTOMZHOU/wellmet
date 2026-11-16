@@ -1,8 +1,9 @@
 import { z } from 'zod';
-import { RequestBookingInput, Slug, type Caller, type PublicEventType } from '@wellmet/contracts';
+import { FindSlotsInput, RequestBookingInput, type Caller, type PublicEventType } from '@wellmet/contracts';
 import { buildServer, canElicit, defineTool, inputRequired, userAnswer, value, type McpServer } from '@wellmet/contracts/mcp';
 import type { Config, PublicCore } from './core.ts';
-import { validTimeZone, zoned, isoWithOffset } from './time.ts';
+import { validTimeZone } from './time.ts';
+import { EventTypeList, SlotList, eventTypeList, slotList, slotWindow } from './shapes.ts';
 
 /**
  * The no-login MCP endpoint for visitors' assistants: three tools, rules only.
@@ -12,14 +13,6 @@ import { validTimeZone, zoned, isoWithOffset } from './time.ts';
 export const PUBLIC_INSTRUCTIONS = (c: Config) =>
   `Book time with ${c.ownerName}. Call list_event_types, then find_slots for the chosen type, then request_booking with a start copied exactly from find_slots. ` +
   'Use a random retry_token per booking and reuse it if you retry. Some types confirm instantly; others wait for approval, and the guest gets an invite once approved.';
-
-const FindSlots = z.object({
-  event_type: Slug,
-  from: z.string().optional().describe('ISO-8601 start of the search window. Defaults to now.'),
-  to: z.string().optional().describe('ISO-8601 end of the window. Defaults to 7 days after "from"; at most 62 days.'),
-  timezone: z.string().optional().describe('IANA timezone to show local times in, e.g. "Europe/Berlin". Does not change which times exist.'),
-  length_min: z.number().int().positive().optional().describe('For types with several lengths.'),
-});
 
 /**
  * The booking input as the assistant sees it. Name and email may be left out
@@ -43,21 +36,20 @@ export function publicServer(core: PublicCore, config: Config, caller: Caller, o
       title: 'List meetings',
       description: `The kinds of meeting ${config.ownerName} offers: slug, title, lengths, where, and whether booking is instant or by request.`,
       input: z.object({}),
+      output: EventTypeList,
       annotations: { readOnlyHint: true, openWorldHint: false },
-      run: async () => ({ event_types: await value(core.listEventTypes()) }),
+      run: async () => eventTypeList(config, await value(core.listEventTypes())),
     }),
     defineTool({
       name: 'find_slots',
       title: 'Find open times',
       description: 'Open start times for one meeting type. Each has "start" in UTC: pass it unchanged to request_booking.',
-      input: FindSlots,
+      input: FindSlotsInput,
+      output: SlotList,
       annotations: { readOnlyHint: true, openWorldHint: false },
       run: async (a) => {
-        const from = a.from ?? new Date().toISOString();
-        const to = a.to ?? new Date(Date.parse(from) + 7 * 86_400_000).toISOString();
-        const slots = await value(core.findSlots(a.event_type, from, to, a.length_min));
-        const tz = validTimeZone(a.timezone) ? a.timezone : null;
-        return { event_type: a.event_type, count: slots.length, slots: slots.map((s) => ({ ...s, ...(tz ? { local: isoWithOffset(zoned(s.start, tz)) } : {}) })) };
+        const [from, to] = slotWindow(a.from, a.to);
+        return slotList(a.event_type, await value(core.findSlots(a.event_type, from, to, a.length_min)), a.timezone);
       },
     }),
     defineTool({

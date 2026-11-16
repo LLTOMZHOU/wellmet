@@ -5,6 +5,9 @@ import { createEventType } from '../../core/src/catalog.ts';
 import { at, setup } from '../../core/test/support/fakes.ts';
 import type { PublicCore } from '../src/core.ts';
 import { CAN_ASK, mcpClient } from '../../../test-support/mcp-client.ts';
+import { Validator } from '@cfworker/json-schema';
+import { compileErrors, validate as validateOpenApi } from '@readme/openapi-parser';
+import { OPERATIONS } from '../src/api.ts';
 
 const BASE = 'https://meet.example';
 const headers = { 'cf-connecting-ip': '203.0.113.7' };
@@ -263,6 +266,89 @@ describe('the no-login agent endpoint', () => {
     const w = await world();
     expect((await w.get('/.well-known/oauth-protected-resource')).status).toBe(404);
     expect((await w.get('/.well-known/oauth-authorization-server')).status).toBe(404);
+  });
+});
+
+describe('the published API description (/openapi.json)', () => {
+  type Doc = { paths: Record<string, Record<string, { responses: Record<string, { content?: { 'application/json': { schema: object } } }> }>>; components: object };
+  const docOf = async (w: Awaited<ReturnType<typeof world>>) => (await (await w.get('/openapi.json')).json()) as Doc;
+
+  /** Checks a real response against what the document says that route returns with that status. */
+  async function conforms(doc: Doc, method: string, path: string, res: Response) {
+    const op = doc.paths[path]?.[method.toLowerCase()];
+    expect(op, `${method} ${path} is documented`).toBeDefined();
+    const documented = op!.responses[String(res.status)];
+    expect(documented, `${method} ${path} documents status ${res.status}`).toBeDefined();
+    const body = await res.json();
+    const result = new Validator({ ...documented!.content!['application/json'].schema, components: doc.components } as never, '2020-12', false).validate(body);
+    expect(result.errors, `${method} ${path} ${res.status}: ${JSON.stringify(body).slice(0, 300)}`).toEqual([]);
+    return body as Record<string, any>;
+  }
+
+  it('is a valid OpenAPI 3.1 document listing every API route', async () => {
+    const w = await world();
+    const res = await w.get('/openapi.json');
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    const doc = (await res.json()) as Doc & { openapi: string; servers: { url: string }[] };
+    const result = await validateOpenApi(structuredClone(doc) as never);
+    expect(result.valid, result.valid ? '' : compileErrors(result)).toBe(true);
+    expect(doc.openapi).toBe('3.1.0');
+    expect(doc.servers[0]!.url).toBe(BASE);
+    const documented = Object.entries(doc.paths).flatMap(([path, ops]) => Object.keys(ops).map((m) => `${m.toUpperCase()} ${path}`)).sort();
+    expect(documented).toEqual(OPERATIONS.map((o) => `${o.method} ${o.path}`).sort());
+  });
+
+  it('describes what every route really returns', async () => {
+    const w = await world();
+    const doc = await docOf(w);
+    await conforms(doc, 'GET', '/api/event-types', await w.get('/api/event-types'));
+    const slots = await conforms(doc, 'GET', '/api/slots', await w.get('/api/slots?event_type=intro&timezone=Asia/Tokyo'));
+    expect(slots.slots[0].local).toMatch(/\+09:00$/);
+    await conforms(doc, 'GET', '/api/slots', await w.get('/api/slots?type=intro&tz=Asia/Tokyo&length=30'));
+    await conforms(doc, 'GET', '/api/slots', await w.get('/api/slots?type=nope'));
+    await conforms(doc, 'GET', '/api/slots', await w.get('/api/slots?type=intro&length=-3'));
+
+    const body = (start: string, n: number, type = 'intro') => ({ event_type: type, start, name: 'Ada', email: `ada${n}@example.com`, timezone: 'Asia/Tokyo', retry_token: `openapi-token-${n}` });
+    const booked = await conforms(doc, 'POST', '/api/bookings', await w.postJson('/api/bookings', body(slots.slots[0].start, 1)));
+    expect(booked.outcome).toBe('confirmed');
+    await conforms(doc, 'POST', '/api/bookings', await w.postJson('/api/bookings', body(slots.slots[0].start, 2)));
+    await conforms(doc, 'POST', '/api/bookings', await w.postJson('/api/bookings', { event_type: 'intro' }));
+    const projectSlots = (await (await w.get('/api/slots?type=project')).json()) as { slots: { start: string }[] };
+    const requested = await conforms(doc, 'POST', '/api/bookings', await w.postJson('/api/bookings', body(projectSlots.slots[0]!.start, 3, 'project')));
+    expect(requested.outcome).toBe('pending');
+
+    const token = booked.booking_token as string;
+    await conforms(doc, 'GET', '/api/bookings/{token}', await w.get(`/api/bookings/${token}`));
+    await conforms(doc, 'GET', '/api/bookings/{token}', await w.get('/api/bookings/nope.nope'));
+    await conforms(doc, 'POST', '/api/bookings/{token}/reschedule', await w.postJson(`/api/bookings/${token}/reschedule`, { start: slots.slots[3].start }));
+    await conforms(doc, 'POST', '/api/bookings/{token}/reschedule', await w.postJson(`/api/bookings/${token}/reschedule`, {}));
+    const cancelled = await conforms(doc, 'POST', '/api/bookings/{token}/cancel', await w.postJson(`/api/bookings/${token}/cancel`, { reason: 'Clash' }));
+    expect(cancelled.status).toBe('cancelled');
+  });
+
+  it('points lost callers to the description', async () => {
+    const w = await world();
+    const missing = await w.get('/api/nothing');
+    expect(missing.status).toBe(404);
+    expect(((await missing.json()) as { error: { message: string } }).error.message).toContain('/openapi.json');
+    expect((await w.get('/api/bookings')).status).toBe(405);
+    expect((await w.get('/api/event-types')).headers.get('link')).toBe('</openapi.json>; rel="service-desc"');
+  });
+
+  it('matches what the MCP tools return', async () => {
+    const w = await world();
+    const doc = await docOf(w);
+    const schemaFor = (path: string) => ({ ...doc.paths[path]!.get!.responses['200']!.content!['application/json'].schema, components: doc.components });
+    const c = mcpClient(`${BASE}/mcp`, (r) => route(r, w.deps), headers);
+    const types = await c.legacy('tools/call', { name: 'list_event_types', arguments: {} });
+    expect(new Validator(schemaFor('/api/event-types') as never, '2020-12', false).validate(types.body.result.structuredContent).errors).toEqual([]);
+    const slots = await c.legacy('tools/call', { name: 'find_slots', arguments: { event_type: 'intro', timezone: 'Asia/Tokyo' } });
+    expect(new Validator(schemaFor('/api/slots') as never, '2020-12', false).validate(slots.body.result.structuredContent).errors).toEqual([]);
+    const tools = (await c.legacy('tools/list')).body.result.tools as { name: string; outputSchema?: object }[];
+    expect(tools.find((t) => t.name === 'find_slots')!.outputSchema).toBeDefined();
+    // A refusal is still a readable tool error, even though the tool declares an output shape.
+    const refused = await c.legacy('tools/call', { name: 'find_slots', arguments: { event_type: 'nope' } });
+    expect(refused.body.result.isError).toBe(true);
   });
 });
 

@@ -32,4 +32,14 @@ export const RequestBookingInput = z
   .refine((b) => Object.values(b.answers).join('').length <= 2000, { message: 'Answers are too long; keep them under 2,000 characters in total.', path: ['answers'] });
 export type RequestBookingInput = z.infer<typeof RequestBookingInput>;
 
+/** Searching for open times: the MCP tool find_slots and GET /api/slots take the same fields. */
+export const FindSlotsInput = z.object({
+  event_type: Slug.describe('The meeting type\'s slug, from the list of meeting types.'),
+  from: z.string().optional().describe('ISO-8601 start of the search window. Defaults to now.'),
+  to: z.string().optional().describe('ISO-8601 end of the window. Defaults to 7 days after "from"; at most 62 days.'),
+  timezone: z.string().optional().describe('IANA timezone to show local times in, e.g. "Europe/Berlin". Does not change which times exist.'),
+  length_min: z.number().int().positive().optional().describe('For types with several lengths.'),
+});
+export type FindSlotsInput = z.infer<typeof FindSlotsInput>;
+
 export type BookingStatus = 'pending' | 'accepted' | 'confirmed' | 'declined' | 'expired' | 'cancelled' | 'failed';

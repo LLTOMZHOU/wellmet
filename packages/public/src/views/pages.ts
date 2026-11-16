@@ -100,8 +100,9 @@ function agentNote(agent: AgentInfo): SafeHtml {
       <p>No login or key is needed. Every open time is listed as a link on this page.</p>
       <ul class="endpoints">
         <li><span>MCP</span><code>${agent.mcpUrl}</code></li>
-        <li><span>Times</span><code>GET ${agent.slotsUrl}?type=${agent.slug}&amp;tz=…</code></li>
+        <li><span>Times</span><code>GET ${agent.slotsUrl}?event_type=${agent.slug}&amp;timezone=…</code></li>
         <li><span>Book</span><code>POST ${agent.bookingsUrl}</code></li>
+        <li><span>API</span><code>${agent.openapiUrl}</code></li>
       </ul>
       <p>Send <code>event_type</code>, <code>start</code>, <code>name</code>, <code>email</code>, <code>timezone</code> and a random <code>retry_token</code>. If unsure whether a request went through, send it again with the same <code>retry_token</code>; it will not book twice.</p>
       <p>An assistant that can only read pages can hand the visitor a link to one of the times; the visitor then confirms with one press.</p>

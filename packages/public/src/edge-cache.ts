@@ -55,8 +55,8 @@ export function changesBookings(request: Request, response: Response): boolean {
 function keyFor(request: Request, generation: string): Request {
   const url = new URL(request.url);
   const query = new URLSearchParams([...url.searchParams].sort(([a], [b]) => a.localeCompare(b)));
-  // Pages without ?tz= use the visitor's own timezone, so it is part of the key.
-  if (!query.has('tz')) {
+  // Pages without ?tz= (or the API's ?timezone=) use the visitor's own timezone, so it is part of the key.
+  if (!query.has('tz') && !query.has('timezone')) {
     const tz = (request as Request & { cf?: { timezone?: string } }).cf?.timezone;
     if (tz) query.set('cf-tz', tz);
   }

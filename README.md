@@ -29,14 +29,14 @@ No sign-in is needed. Assistants can use either interface.
 
 **MCP** at `/mcp` has three tools: `list_event_types`, `find_slots` and `request_booking`. Both MCP endpoints use the official TypeScript SDK and speak the 2026-07-28 revision, falling back to the 2025 `initialize` handshake for older clients. A client that can show forms asks the guest to confirm their own name, email and answers before anything is booked.
 
-**HTTP API:**
+**HTTP API**, described in full at [`/openapi.json`](https://meet.yuxingzhou.me/openapi.json) (OpenAPI 3.1):
 
 ```bash
 curl https://meet.yuxingzhou.me/api/event-types
 ```
 
 ```bash
-curl "https://meet.yuxingzhou.me/api/slots?type=chat&tz=Europe/Berlin"
+curl "https://meet.yuxingzhou.me/api/slots?event_type=chat&timezone=Europe/Berlin"
 ```
 
 ```bash
@@ -48,6 +48,8 @@ curl -X POST https://meet.yuxingzhou.me/api/bookings \
 Copy `start` exactly from the slots response. A booking returns `201` when it is confirmed and `202` when it waits for approval. Either way the response includes a `manage_url`.
 
 Use `GET /api/bookings/<token>` to read a booking, and `POST` to `/api/bookings/<token>/cancel` or `/api/bookings/<token>/reschedule` to change it.
+
+The MCP tools and the HTTP API share their schemas: `find_slots` and `GET /api/slots` take the same fields and return the same shape, and so do `list_event_types` and `GET /api/event-types`. `/openapi.json` is generated from the same route table the API runs on, and the tests check every response against it, so the two can't drift apart.
 
 ## What the owner gets
 

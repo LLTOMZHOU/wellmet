@@ -66,6 +66,8 @@ export interface ToolDefinition<S extends z.ZodObject> {
   title: string;
   description: string;
   input: S;
+  /** The shape of a successful result, published as the tool's outputSchema. */
+  output?: z.ZodObject;
   annotations: ToolAnnotations;
   /** Return a plain value (sent as text and structured content), or `inputRequired(...)` to ask the user first. */
   run: (args: z.output<S>, ctx: ServerContext) => Promise<unknown>;
@@ -81,7 +83,7 @@ export const defineTool = <S extends z.ZodObject>(t: ToolDefinition<S>): AnyTool
 export function buildServer(info: McpServerInfo, tools: readonly AnyTool[], onError?: (err: unknown) => void): McpServer {
   const server = new McpServer({ name: info.name, title: info.title, version: info.version }, { instructions: info.instructions });
   for (const t of tools) {
-    server.registerTool(t.name, { title: t.title, description: t.description, inputSchema: t.input, annotations: t.annotations }, async (args, ctx) => {
+    server.registerTool(t.name, { title: t.title, description: t.description, inputSchema: t.input, ...(t.output ? { outputSchema: t.output } : {}), annotations: t.annotations }, async (args, ctx) => {
       try {
         const value = await t.run(args as z.output<z.ZodObject>, ctx);
         return isInputRequiredResult(value) ? value : toolResult(value, false);
