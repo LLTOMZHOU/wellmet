@@ -1,35 +1,60 @@
-# Wellmet
+<p align="center">
+  <img src="docs/images/hero.png" alt="Wellmet: a timetable of open times with 14:30 highlighted in yellow" width="900">
+</p>
 
-A self-hosted scheduler, like Calendly, that you set up by talking to your AI assistant. It runs on Cloudflare Workers.
+<p align="center">
+  <b>A self-hosted scheduler, like Calendly, that you set up by talking to your AI assistant.</b><br>
+  Runs on Cloudflare Workers. Books into Outlook with Google Meet links.
+</p>
 
-- **You** have no dashboard. You connect Wellmet to Claude, ChatGPT or any other MCP client and say things like "add a 30-minute chat, weekday evenings only, I approve each request".
+<p align="center">
+  <a href="https://meet.yuxingzhou.me">Live example</a> ·
+  <a href="#self-hosting">Self-host it</a> ·
+  <a href="https://meet.yuxingzhou.me/openapi.json">API description</a> ·
+  <a href="LICENSE">MIT</a>
+</p>
+
+---
+
+- **You** have no dashboard. You connect Wellmet to Claude, ChatGPT, Codex or any other MCP client and say what you want: "add a 30-minute chat, weekday evenings only, I approve each request".
 - **Visitors** book on a plain web page, or paste one line into their own AI assistant and let it find a time.
 - **Bookings** land in your Outlook calendar with a Google Meet link, and Outlook sends the guest the invite.
 
-Live at [meet.yuxingzhou.me](https://meet.yuxingzhou.me). The name comes from the old greeting "well met".
+The name comes from the old greeting "well met".
 
-## What visitors get
+![The booking page for an intro call: a month calendar with Tuesday the 17th selected in yellow, open times for that day, and the same page on a phone](docs/images/booking-page.png)
 
-Every page is server-rendered HTML that works with JavaScript turned off. Open times are ordinary links, so an assistant that can only fetch pages can still read them.
+## Set it up by talking
 
-| Path | What it is |
+![A conversation: you ask for a 30-minute chat on weekday evenings and weekend afternoons; the assistant calls upsert_schedule, create_event_type and preview_event_type; later Wellmet asks you to confirm declining three waiting requests](docs/images/owner-chat.png)
+
+The owner tools are an MCP server at `https://meet-mcp.<your-domain>/mcp`. Your client signs in with OAuth through Microsoft, and only your own account is let in.
+
+| Area | Tools |
 |---|---|
-| `/` | The kinds of meeting on offer |
-| `/<type>` | Description, a month calendar and every open time for the chosen day |
-| `/<type>/book` | Name, email, any intake questions, one Confirm button |
-| `/b/<token>` | The booking's status, with cancel and reschedule. The token is the guest's private link |
+| Meeting types | `list_event_types`, `create_event_type`, `update_event_type`, `duplicate_event_type`, `archive_event_type`, `preview_event_type` |
+| Hours | `list_schedules`, `upsert_schedule`, `list_date_overrides`, `set_date_override`, `remove_date_override`, `get_availability` |
+| Bookings | `list_bookings`, `get_booking`, `decide_bookings`, `cancel_booking`, `reschedule_booking` |
+| Calendar | `block_time`, `list_blocks`, `unblock_time` |
+| Running it | `get_health`, `get_connect_links`, `revoke_all_access` |
 
-Each page carries one line to hand to an assistant, for example:
+A meeting type sets its lengths, how often start times are offered, buffers before and after, minimum notice and how far ahead people can book, daily and weekly limits, a named weekly schedule, instant booking or your approval, up to 10 intake questions, the place (Google Meet, a phone number or an address), and whether it is listed on the front page.
+
+When a request needs approval, an email with approve and decline links goes to your inbox, or you can ask your assistant. Approving one request declines any others that overlap it. If your client can show you a question, Wellmet asks before acting on more than one request at once.
+
+## Visitors' assistants can book too
+
+![How a visitor's assistant books: list_event_types, find_slots with 19:30 picked, request_booking showing the guest a form to confirm their name and email, then Tom approves and the guest gets an Outlook invite with a Meet link](docs/images/agent-booking.png)
+
+Every booking page carries one line to paste into any assistant, for example:
 
 > Find a time for a 30-min chat with Tom Zhou: https://meet.yuxingzhou.me/chat (open times and booking steps are on that page, no login; MCP: https://meet.yuxingzhou.me/mcp)
 
-### For visitors' assistants
+No sign-in or key is needed. An assistant can use whichever of these it understands:
 
-No sign-in is needed. Assistants can use either interface.
-
-**MCP** at `/mcp` has three tools: `list_event_types`, `find_slots` and `request_booking`. Both MCP endpoints use the official TypeScript SDK and speak the 2026-07-28 revision, falling back to the 2025 `initialize` handshake for older clients. A client that can show forms asks the guest to confirm their own name, email and answers before anything is booked.
-
-**HTTP API**, described in full at [`/openapi.json`](https://meet.yuxingzhou.me/openapi.json) (OpenAPI 3.1):
+- **Web pages.** Every page is server-rendered HTML that works with JavaScript turned off, and every open time is an ordinary link. An assistant that can only read pages can still find a time and hand the visitor a link to it.
+- **MCP** at `/mcp`, with three tools: `list_event_types`, `find_slots` and `request_booking`. If the assistant's client can show a form, the guest confirms their own name, email and answers before anything is booked.
+- **HTTP API** under `/api`, described in full at [`/openapi.json`](https://meet.yuxingzhou.me/openapi.json) (OpenAPI 3.1).
 
 ```bash
 curl https://meet.yuxingzhou.me/api/event-types
@@ -42,69 +67,46 @@ curl "https://meet.yuxingzhou.me/api/slots?event_type=chat&timezone=Europe/Berli
 ```bash
 curl -X POST https://meet.yuxingzhou.me/api/bookings \
   -H 'content-type: application/json' \
-  -d '{"event_type":"chat","start":"2026-11-17T03:00:00Z","name":"Ada","email":"ada@example.com","timezone":"Europe/Berlin"}'
+  -d '{"event_type":"chat","start":"2026-11-17T03:00:00.000Z","name":"Ada","email":"ada@example.com","timezone":"Europe/Berlin","retry_token":"a-random-value-123"}'
 ```
 
-Copy `start` exactly from the slots response. A booking returns `201` when it is confirmed and `202` when it waits for approval. Either way the response includes a `manage_url`.
+Copy `start` exactly from the slots response, and make up a random `retry_token`: sending the same request again with the same token never books twice. A booking returns `201` when it is confirmed and `202` when it waits for approval, with a `booking_token` for `GET /api/bookings/<token>` and its `/cancel` and `/reschedule` actions.
 
-Use `GET /api/bookings/<token>` to read a booking, and `POST` to `/api/bookings/<token>/cancel` or `/api/bookings/<token>/reschedule` to change it.
+The MCP tools and the HTTP API share their schemas. `find_slots` and `GET /api/slots` take the same fields and return the same shape, as do `list_event_types` and `GET /api/event-types`. `/openapi.json` is generated from the route table the API runs on, and the tests check every response against it.
 
-The MCP tools and the HTTP API share their schemas: `find_slots` and `GET /api/slots` take the same fields and return the same shape, and so do `list_event_types` and `GET /api/event-types`. `/openapi.json` is generated from the same route table the API runs on, and the tests check every response against it, so the two can't drift apart.
+## The pages
 
-## What the owner gets
+![Three more pages: the list of meeting types, the confirm form with the chosen time in yellow, and the booked receipt with a Join the meeting button](docs/images/pages.png)
 
-The owner MCP server is at `https://meet-mcp.<your-domain>/mcp`. It uses OAuth: your client opens a Microsoft sign-in, and only your own account is let in.
-
-| Area | Tools |
+| Path | What it is |
 |---|---|
-| Meeting types | `list_event_types`, `create_event_type`, `update_event_type`, `duplicate_event_type`, `archive_event_type`, `preview_event_type` |
-| Hours | `list_schedules`, `upsert_schedule`, `list_date_overrides`, `set_date_override`, `remove_date_override`, `get_availability` |
-| Bookings | `list_bookings`, `get_booking`, `decide_bookings`, `cancel_booking`, `reschedule_booking` |
-| Calendar | `block_time`, `list_blocks`, `unblock_time` |
-| Running it | `get_health`, `get_connect_links`, `revoke_all_access` |
+| `/` | The kinds of meeting on offer |
+| `/<type>` | Description, a month calendar and every open time for the chosen day |
+| `/<type>/book` | Name, email, any intake questions, one Confirm button |
+| `/b/<token>` | The booking's status, with cancel and reschedule. The token is the guest's private link |
 
-A meeting type sets:
-
-- one or more lengths;
-- how often start times are offered;
-- buffers before and after;
-- minimum notice and how far ahead visitors can book;
-- daily and weekly limits;
-- a named weekly schedule;
-- instant booking or your approval;
-- up to 10 intake questions;
-- Google Meet, a phone number or an address;
-- whether it is listed on the front page.
-
-When a request needs approval, an email with approve and decline links goes to your inbox. Approving one request declines any others that overlap it.
+The look is a printed Swiss timetable: a white sheet split by black rules, bold numerals, and one signal yellow for what you've picked. The rules are in [DESIGN.md](DESIGN.md).
 
 ## How it works
 
-```mermaid
-flowchart LR
-  V[Visitor or their assistant] --> P["wellmet-public<br/>meet.example.com"]
-  O[Your MCP client] --> W["wellmet-owner<br/>meet-mcp.example.com"]
-  P -- "Service Binding: PublicApi" --> C[wellmet-core]
-  W -- "Service Binding: OwnerApi" --> C
-  C --> D[(D1)]
-  C --> G[Microsoft Graph: Outlook]
-  C --> M[Google Meet API]
-  C --> E[Cloudflare Email]
-```
+![Architecture: visitors and their assistants reach wellmet-public at meet.yuxingzhou.me; you reach wellmet-owner at meet-mcp.yuxingzhou.me; both call wellmet-core through Service Bindings; only wellmet-core talks to Outlook, Google Meet and Cloudflare Email and holds secrets](docs/images/architecture.png)
 
 There are three Workers, and each one can reach only what it is bound to.
 
 | Worker | Address | Holds | Job |
 |---|---|---|---|
 | `wellmet-public` | `meet.` | Nothing: no database and no secrets | Pages, the JSON API and the no-login MCP. Can call only core's public methods |
-| `wellmet-owner` | `meet-mcp.` | OAuth grants in KV | Your sign-in, your MCP tools and the approve and decline pages. These pages run no script |
+| `wellmet-owner` | `meet-mcp.` | OAuth grants in KV | Your sign-in, your MCP tools and the approve and decline pages, which run no script |
 | `wellmet-core` | None | D1, plus Microsoft and Google tokens encrypted with `MASTER_KEY` | Booking rules, Outlook and Meet calls, and email. A job runs every minute to retry unfinished work, expire old requests and refresh tokens |
 
-A bug in the public Worker therefore can't reach your credentials or your owner tools.
+A few more details:
 
-Open times are checked against Outlook and checked again when a booking is made, so a time that has just been taken gets "no longer open" with nearby alternatives. Public pages are cached at Cloudflare's edge for up to a minute. A booking, cancellation or move clears the cache at the Cloudflare location that handled it, so the visitor who made the change sees it straight away.
+- **Times stay correct.** Open times are read from Outlook and checked again when a booking is made, so a time that has just been taken answers "no longer open" with nearby alternatives.
+- **Pages are fast.** Public pages are cached at Cloudflare's edge for up to a minute and rebuilt in the background. A booking, cancellation or move clears the cache at the location that handled it, so the person who made the change sees it straight away.
+- **Both MCP endpoints use the official TypeScript SDK.** They speak the 2026-07-28 revision of the protocol (with `server/discover`) and fall back to the older `initialize` handshake for clients that still use it. Batched requests are refused, so one request can't carry many tool calls past the rate limits.
+- **It stays out of search.** Every response carries `X-Robots-Tag: noindex`, and `robots.txt` turns away crawlers, AI training crawlers included. The exceptions are search engines, which must fetch a page to see the noindex, and assistants fetching a page because a person asked them to.
 
-The reasoning behind this split, including the options that were rejected, is in [docs/design/agent-scheduler](docs/design/agent-scheduler/overview.md). The visual rules are in [DESIGN.md](DESIGN.md).
+The reasoning behind the three-Worker split, including the options that were rejected, is in [docs/design/agent-scheduler](docs/design/agent-scheduler/overview.md).
 
 ## Self-hosting
 
@@ -140,7 +142,7 @@ Put the returned IDs into these files:
 
 ### 3. Make it yours
 
-In all three `wrangler.jsonc` files, change these values:
+In the three `wrangler.jsonc` files, change these values wherever they appear:
 
 - the `routes` domains;
 - `PUBLIC_URL` and `OWNER_URL`;
@@ -206,7 +208,7 @@ claude mcp add --transport http wellmet https://meet-mcp.<domain>/mcp
 ```
 
 1. Sign in with Microsoft when asked. This sign-in also connects Outlook.
-2. Ask your assistant for `get_connect_links` and open the Google one to connect Meet.
+2. Ask your assistant to connect Google Meet. It calls `get_connect_links` and gives you the page to open.
 3. `get_health` should report both connections as working. You can then create your first meeting type.
 
 ## Development
@@ -223,16 +225,18 @@ npm run typecheck
 npm run preview:pages
 ```
 
-`preview:pages` renders every public page with sample data, so you can look at the design without deploying.
+`preview:pages` renders every public page with sample data, so you can look at the design without deploying. The tests run the Workers' code against an in-memory database. They include MCP clients of both protocol generations and a contract test that checks every API response against `/openapi.json`.
 
 ```
 packages/
-  contracts/   Shared schemas (zod), MCP plumbing and HTML escaping
+  contracts/   Shared schemas (zod), MCP serving on the official SDK, robots rules
   core/        Rules, slot engine, bookings, Graph, Meet and mail; D1 migrations
   owner/       OAuth server, owner MCP tools and owner pages
-  public/      Pages, JSON API, visitor MCP, edge cache and static assets
+  public/      Pages, JSON API and OpenAPI, visitor MCP, edge cache, static assets
 docs/design/   Design brief, options, reviews and decision
+docs/images/   README images; src/ holds the HTML the diagrams are drawn from
 scripts/       Page preview and favicon generator
+test-support/  Test helpers, including an MCP client for both protocol generations
 ```
 
 ## Known limits
@@ -240,6 +244,7 @@ scripts/       Page preview and favicon generator
 - **One owner:** Wellmet is built around a single person's calendar.
 - **Personal Microsoft accounts only:** Outlook is the only calendar it reads and writes.
 - **Invite sender:** Outlook sends invites from your Microsoft account's primary address. If that address is an auto-generated `outlook_…@outlook.com` mailbox, Gmail may file invites as spam. Make your real address the primary alias.
+- **Asking questions needs a recent client:** the guest form and your confirmations appear only in MCP clients that support elicitation on the 2026-07-28 protocol. Other clients work as before, without the questions.
 
 ## License
 

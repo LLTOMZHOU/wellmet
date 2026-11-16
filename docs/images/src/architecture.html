@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wellmet architecture</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+  .canvas { width: 1320px; height: 660px; }
+  .col { position: absolute; top: 40px; }
+  .top-rule { position: absolute; left: 40px; right: 40px; top: 70px; border-top: 2px solid var(--ink); }
+  .box { position: absolute; border: 2px solid var(--ink); background: var(--paper); padding: 16px 18px; }
+  .box h3 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+  .box .addr { font-family: var(--mono); font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+  .box ul { list-style: none; margin-top: 12px; border-top: 1px solid var(--hair); }
+  .box li { font-size: 15px; padding: 6px 0; border-bottom: 1px solid var(--hair); }
+  .box .foot { margin-top: 10px; font-size: 13px; font-weight: 600; }
+  .who { position: absolute; padding-top: 10px; border-top: 1px solid var(--hair); }
+  .who b { display: block; font-size: 20px; letter-spacing: -0.02em; }
+  .who span { display: block; font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+  .svc { position: absolute; padding-top: 10px; border-top: 1px solid var(--hair); }
+  .svc b { display: block; font-size: 19px; letter-spacing: -0.02em; }
+  .svc span { display: block; font-size: 14px; color: var(--ink-2); margin-top: 2px; }
+  .core h3 { background: var(--signal); margin: -16px -18px 0; padding: 16px 18px 12px; }
+  .label { position: absolute; font-size: 12px; font-weight: 600; text-align: center; line-height: 1.25; }
+  .core-foot { position: absolute; left: 18px; right: 18px; bottom: 16px; padding-top: 10px; border-top: 2px solid var(--ink); }
+  .caption { line-height: 1.5; position: absolute; left: 40px; right: 40px; bottom: 28px; border-top: 2px solid var(--ink); padding-top: 14px; font-size: 16px; color: var(--ink-2); }
+  .caption b { color: var(--ink); }
+  svg { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+<div class="canvas" id="architecture">
+  <div class="col eyebrow" style="left:40px">Who</div>
+  <div class="col eyebrow" style="left:370px">On the internet</div>
+  <div class="col eyebrow" style="left:760px">Inside Cloudflare</div>
+  <div class="col eyebrow" style="left:1080px">Services</div>
+  <div class="top-rule"></div>
+
+  <svg width="1320" height="660" viewBox="0 0 1320 660" aria-hidden="true">
+    <defs>
+      <marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+      </marker>
+    </defs>
+    <g stroke="#111" stroke-width="2" fill="none" marker-end="url(#head)">
+      <path d="M290,132 L366,132"/>
+      <path d="M290,232 L366,232"/>
+      <path d="M290,452 L366,452"/>
+      <path d="M632,200 L756,200"/>
+      <path d="M632,452 L756,452"/>
+      <path d="M1002,140 L1076,140"/>
+      <path d="M1002,262 L1076,262"/>
+      <path d="M1002,384 L1076,384"/>
+    </g>
+  </svg>
+
+  <div class="who" style="left:40px; top:100px; width:240px"><b>Visitor</b><span>in a browser</span></div>
+  <div class="who" style="left:40px; top:200px; width:240px"><b>Visitor's assistant</b><span>MCP or HTTP, no sign-in</span></div>
+  <div class="who" style="left:40px; top:420px; width:240px"><b>You</b><span>in Claude, ChatGPT or Codex</span></div>
+
+  <div class="box" style="left:370px; top:100px; width:262px; height:232px">
+    <h3>wellmet-public</h3>
+    <div class="addr">meet.yuxingzhou.me</div>
+    <ul><li>Booking pages, no script needed</li><li>/api and /openapi.json</li><li>/mcp, 3 tools</li></ul>
+    <div class="foot">No database, no secrets</div>
+  </div>
+
+  <div class="box" style="left:370px; top:380px; width:262px; height:200px">
+    <h3>wellmet-owner</h3>
+    <div class="addr">meet-mcp.yuxingzhou.me</div>
+    <ul><li>OAuth sign-in with Microsoft</li><li>/mcp, 23 tools</li><li>Approve and decline pages</li></ul>
+    <div class="foot">Sign-in grants in KV</div>
+  </div>
+
+  <div class="label" style="left:640px; top:162px; width:110px">Service Binding<br>PublicApi</div>
+  <div class="label" style="left:640px; top:414px; width:110px">Service Binding<br>OwnerApi</div>
+
+  <div class="box core" style="left:760px; top:100px; width:242px; height:480px">
+    <h3>wellmet-core</h3>
+    <div class="addr" style="margin-top:12px">no public address</div>
+    <ul>
+      <li>Booking rules and limits</li>
+      <li>Bookings and schedules in D1</li>
+      <li>Outlook and Google tokens, encrypted</li>
+      <li>Every minute: retries, expiry, token refresh</li>
+    </ul>
+    <div class="foot core-foot">The only part that holds secrets</div>
+  </div>
+
+  <div class="svc" style="left:1080px; top:110px; width:200px"><b>Outlook</b><span>busy times, events, the invite</span></div>
+  <div class="svc" style="left:1080px; top:232px; width:200px"><b>Google Meet</b><span>a link per booking</span></div>
+  <div class="svc" style="left:1080px; top:354px; width:200px"><b>Cloudflare Email</b><span>approval requests to you</span></div>
+
+  <div class="caption"><b>Each Worker can reach only what it is bound to.</b> A bug in the public Worker can't touch your calendar tokens or your owner tools.</div>
+</div>
+</body>
+</html>

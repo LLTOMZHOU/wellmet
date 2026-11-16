@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setting up Wellmet by talking to your assistant</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+  .canvas { width: 1320px; padding: 40px; display: grid; grid-template-columns: 340px 1fr; column-gap: 56px; }
+  .side { border-top: 2px solid var(--ink); padding-top: 18px; }
+  .side h2 { font-size: 40px; line-height: 1.02; letter-spacing: -0.035em; font-weight: 800; margin-top: 18px; }
+  .side h2 span { color: var(--ink-3); }
+  .side p { font-size: 17px; line-height: 1.5; color: var(--ink-2); margin-top: 18px; }
+  .chat { border-top: 2px solid var(--ink); }
+  .turn { display: grid; grid-template-columns: 96px 1fr; column-gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--hair); }
+  .turn .who { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding-top: 4px; }
+  .say { font-size: 20px; line-height: 1.45; letter-spacing: -0.01em; }
+  .say.you { font-weight: 600; }
+  .calls { margin-top: 2px; }
+  .call { font-family: var(--mono); font-size: 14px; line-height: 1.5; display: grid; grid-template-columns: 22px 1fr; color: var(--ink); padding: 3px 0; }
+  .call .ok { font-family: var(--sans); font-weight: 800; }
+  .call .args { color: var(--ink-2); }
+  .say a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+  .times { display: flex; gap: 8px; margin-top: 10px; }
+  .times span { font-size: 18px; font-weight: 700; border-bottom: 2px solid var(--ink); padding: 2px 6px 4px 0; }
+  .ask { border: 2px solid var(--ink); padding: 16px 18px; margin-top: 4px; max-width: 640px; }
+  .ask .q { font-size: 17px; line-height: 1.45; }
+  .ask .q b { font-weight: 700; }
+  .ask .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .btn { font-size: 14px; font-weight: 700; padding: 9px 14px; border: 2px solid var(--ink); }
+  .btn.go { background: var(--signal); }
+  .note { font-size: 13px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="canvas" id="owner-chat">
+  <div class="side">
+    <div class="wordmark">Wellmet</div>
+    <h2>No dashboard.<br><span>Just ask your assistant.</span></h2>
+    <p>Wellmet's owner tools are an MCP server. Claude, ChatGPT, Codex or any other MCP client signs in once, then sets up meeting types, hours and bookings for you.</p>
+  </div>
+
+  <div class="chat">
+    <div class="turn">
+      <div class="who">You</div>
+      <div class="say you">Add a 30-minute chat for weekday evenings, 7 to 11, and weekend afternoons, 2&nbsp;to&nbsp;5. I want to approve each request.</div>
+    </div>
+    <div class="turn">
+      <div class="who">Assistant</div>
+      <div class="calls">
+        <div class="call"><span class="ok">✓</span><span>upsert_schedule <span class="args">{ id: "chat", mon–fri 19:00–23:00, sat–sun 14:00–17:00 }</span></span></div>
+        <div class="call"><span class="ok">✓</span><span>create_event_type <span class="args">{ slug: "chat", lengths: [30], confirmation: "approval" }</span></span></div>
+        <div class="call"><span class="ok">✓</span><span>preview_event_type <span class="args">{ slug: "chat", days: 7 }</span></span></div>
+      </div>
+    </div>
+    <div class="turn">
+      <div class="who"></div>
+      <div>
+        <div class="say">Done. Chat is live at <a>meet.yuxingzhou.me/chat</a>. The first open times are:</div>
+        <div class="times"><span>Mon 19:00</span><span>19:30</span><span>20:00</span><span>Tue 19:00</span></div>
+      </div>
+    </div>
+    <div class="turn">
+      <div class="who">You</div>
+      <div class="say you">Decline the three chat requests that came in today.</div>
+    </div>
+    <div class="turn">
+      <div class="who">Wellmet</div>
+      <div class="ask">
+        <div class="q"><b>Decline 3 waiting requests?</b> Ada (chat, Tue Nov 17, 7:00 PM); Grace (chat, Tue Nov 17, 8:30 PM); Linus (chat, Wed Nov 18, 7:30 PM).</div>
+        <div class="row"><span class="btn go">Decline all 3</span><span class="btn">Cancel</span><span class="note">Your client asks you directly; nothing changes without a yes.</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

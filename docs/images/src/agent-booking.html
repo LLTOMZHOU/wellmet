@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How a visitor's assistant books with Wellmet</title>
+<link rel="stylesheet" href="diagram.css">
+<style>
+  .canvas { width: 1320px; padding: 40px; display: grid; grid-template-columns: 340px 1fr; column-gap: 56px; }
+  .side { border-top: 2px solid var(--ink); padding-top: 18px; }
+  .side h2 { font-size: 40px; line-height: 1.02; letter-spacing: -0.035em; font-weight: 800; margin-top: 18px; }
+  .side h2 span { color: var(--ink-3); }
+  .side p { font-size: 17px; line-height: 1.5; color: var(--ink-2); margin-top: 18px; }
+  .paste { margin-top: 22px; background: var(--wash); padding: 14px 16px; font-family: var(--mono); font-size: 13px; line-height: 1.55; }
+  .steps { border-top: 2px solid var(--ink); }
+  .step { display: grid; grid-template-columns: 56px 300px 1fr; column-gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--hair); align-items: start; }
+  .num { font-size: 13px; font-weight: 700; color: var(--ink-3); padding-top: 5px; }
+  .what b { display: block; font-size: 21px; letter-spacing: -0.02em; line-height: 1.2; }
+  .what code { display: inline-block; font-family: var(--mono); font-size: 13px; color: var(--ink-2); margin-top: 6px; }
+  .what small { display: block; font-size: 13px; line-height: 1.45; color: var(--ink-3); margin-top: 10px; max-width: 260px; }
+  .result { font-size: 16px; line-height: 1.5; color: var(--ink-2); padding-top: 3px; }
+  .result strong { color: var(--ink); }
+  .slots { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+  .slots span { font-size: 19px; font-weight: 700; color: var(--ink); border-bottom: 2px solid var(--ink); padding: 0 6px 3px 0; }
+  .slots span.on { background: var(--signal); padding-left: 6px; }
+  .form { border: 2px solid var(--ink); padding: 14px 16px; }
+  .form .q { font-size: 15px; line-height: 1.45; color: var(--ink); }
+  .form .field { margin-top: 10px; }
+  .form .field label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .form .field div { border-bottom: 2px solid var(--ink); font-size: 16px; color: var(--ink); padding: 4px 0; }
+  .form .row { display: flex; gap: 10px; margin-top: 12px; }
+  .btn { font-size: 13px; font-weight: 700; padding: 7px 12px; border: 2px solid var(--ink); color: var(--ink); }
+  .btn.go { background: var(--signal); }
+  .outcome { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .outcome div { border-top: 1px solid var(--hair); padding-top: 8px; }
+  .outcome b { display: block; color: var(--ink); font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="canvas" id="agent-booking">
+  <div class="side">
+    <div class="wordmark">Wellmet</div>
+    <h2>Your visitors' assistants<br><span>can book too.</span></h2>
+    <p>Every booking page carries one line to paste into any assistant. It finds a time over MCP or the HTTP API, with no sign-in and no key.</p>
+    <div class="paste">Find a time for a 30-min chat with Tom Zhou: https://meet.yuxingzhou.me/chat (open times and booking steps are on that page, no login; MCP: https://meet.yuxingzhou.me/mcp)</div>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="num">01</div>
+      <div class="what"><b>See what's on offer</b><code>list_event_types</code></div>
+      <div class="result"><strong>Chat</strong>, 30 min, Google Meet, Tom approves each request.</div>
+    </div>
+    <div class="step">
+      <div class="num">02</div>
+      <div class="what"><b>Find open times</b><code>find_slots { event_type: "chat" }</code></div>
+      <div class="result slots"><span>Tue 19:00</span><span class="on">19:30</span><span>20:00</span><span>21:30</span><span>Wed 19:00</span></div>
+    </div>
+    <div class="step">
+      <div class="num">03</div>
+      <div class="what"><b>Ask the guest to confirm</b><code>request_booking { start, … }</code><small>In clients that can show a form. Others send the guest's name and email themselves.</small></div>
+      <div class="form">
+        <div class="q">Book "Chat" with Tom Zhou on Tuesday, November 17, 2026 at 7:30 PM? Check your details.</div>
+        <div class="field"><label>Your name</label><div>Ada Lovelace</div></div>
+        <div class="field"><label>Your email</label><div>ada@example.com</div></div>
+        <div class="row"><span class="btn go">Confirm</span><span class="btn">Decline</span></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="num">04</div>
+      <div class="what"><b>Done</b><code>outcome: pending → confirmed</code></div>
+      <div class="result outcome">
+        <div><b>Tom approves</b>from the email Wellmet sends him, or by asking his own assistant.</div>
+        <div><b>The guest gets an invite</b>from Outlook, with a Google Meet link and a page to cancel or move it.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
