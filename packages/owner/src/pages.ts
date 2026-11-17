@@ -7,12 +7,19 @@ import { AuthorizationError, authorizationErrorRedirect, type OAuthHelpers } fro
  * The browser pages on Tom's owner hostname. None runs script (CSP
  * default-src 'none'), and nothing is authorised by a cookie alone: consent
  * uses the library's browser-bound handle, connects use a state cookie checked
- * against the callback, and approval links carry their own MAC.
+ * against the callback, and approval links carry their own MAC. An approval
+ * link is therefore a key: whoever holds it can decide that one request, so it
+ * works only for 48 hours or until the meeting time, whichever is sooner.
  */
+
+/** What an approval link opens: the request while the link works, or just which request it was once it doesn't. */
+export type ApprovalPeek =
+  | (OwnerBooking & { link: 'live'; title: string; when: string; request_ends: string | null; link_expires: string })
+  | { link: 'time_passed' | 'expired'; title: string; when: string; status: string };
 
 export interface PageCore {
   ping(): Promise<Result<{ contract: number }>>;
-  peekApproval(token: string): Promise<Result<OwnerBooking & { title: string; when: string }>>;
+  peekApproval(token: string): Promise<Result<ApprovalPeek>>;
   decideByLink(token: string, action: 'approve' | 'decline'): Promise<Result<{ result: string; status?: string; detail?: string }>>;
   finishConnect(provider: 'microsoft' | 'google', code: string, codeVerifier: string, redirectUri: string): Promise<Result<{ owner: true; email: string } | { owner: false; reason: string }>>;
   spendAnonBudget(kind: 'register' | 'authorize'): Promise<Result<{ allowed: boolean }>>;
@@ -307,6 +314,18 @@ async function showApproval(env: PageEnv, token: string): Promise<Response> {
   const r = await env.CORE.peekApproval(token);
   if (!r.ok) return page('Not found', html`<h1>Not found</h1><p>${r.error.message}</p>`, 404);
   const b = r.value;
+  if (b.link === 'time_passed') {
+    return page('Time has passed', html`<h1>Time has passed</h1>
+      <p>The ${b.title} request for <strong>${b.when}</strong> was still undecided when that time arrived, so it was declined automatically. Nothing was booked.</p>
+      <p class="muted">If you still want to meet, ask the guest to pick a new time.</p>`, 410);
+  }
+  if (b.link !== 'live') {
+    return page('Link expired', html`<h1>Link expired</h1>
+      <p>This link to the ${b.title} request for <strong>${b.when}</strong> no longer works. Approval links last 48 hours, or until the meeting time if that is sooner.</p>
+      <p class="muted">${b.status === 'pending'
+        ? 'The request is still waiting. Ask your assistant to approve or decline it.'
+        : `The request is already settled: ${statusWord(b.status).toLowerCase()}.`}</p>`, 410);
+  }
   const g = b.guest_supplied;
   const waiting = b.status === 'pending';
   return page(`${b.title}: request`, html`
@@ -315,7 +334,7 @@ async function showApproval(env: PageEnv, token: string): Promise<Response> {
       <div><dt>Meeting</dt><dd>${b.title}</dd></div>
       <div><dt>When</dt><dd>${b.when}</dd></div>
       <div><dt>Length</dt><dd>${b.length_min} min</dd></div>
-      ${b.expires_at && waiting ? html`<div><dt>Lapses</dt><dd>${new Date(b.expires_at).toUTCString()}</dd></div>` : ''}
+      ${b.request_ends && waiting ? html`<div><dt>Decide by</dt><dd>${b.request_ends}</dd></div>` : ''}
     </dl>
     <section class="guest"><h2>Typed by the guest, not verified</h2>
       <p><strong>${g.name}</strong> &lt;${g.email}&gt;</p>
@@ -323,7 +342,8 @@ async function showApproval(env: PageEnv, token: string): Promise<Response> {
     </section>
     ${waiting
       ? html`<form method="post"><div class="actions"><button name="action" value="approve">Approve</button><button class="quiet" name="action" value="decline">Decline</button></div></form>`
-      : html`<p class="muted">Nothing left to decide.</p>`}`);
+      : html`<p class="muted">Nothing left to decide.</p>`}
+    <p class="warn">Don't share this page's address. It works without a sign-in, so anyone who has it can ${waiting ? 'approve or decline this request' : 'see this request'}. It stops working on ${b.link_expires}.</p>`);
 }
 
 async function decideApproval(request: Request, env: PageEnv, token: string): Promise<Response> {
@@ -337,12 +357,17 @@ async function decideApproval(request: Request, env: PageEnv, token: string): Pr
     already_approved: 'This was already approved; nothing changed.',
     already_decided: `This was already ${r.value.status ?? 'decided'}; nothing changed.`,
     time_taken: 'That time has since been booked, so this request was declined.',
+    time_passed: 'The meeting time arrived before this was decided, so the request was declined automatically. Nothing was booked.',
+    link_expired: r.value.status === 'pending'
+      ? 'This link no longer works. The request is still waiting; ask your assistant to approve or decline it.'
+      : 'This link no longer works, and the request is already settled. Nothing changed.',
     try_again: 'Another booking for that time is being checked right now. Try again in a minute.',
     calendar_problem: r.value.detail === 'conflict'
       ? 'Your Outlook calendar now shows something at that time, so it was not approved. The request is still waiting.'
       : 'Outlook did not answer, so it was not approved. The request is still waiting; try again shortly.',
   };
-  return page('Done', html`<h1>${r.value.result === 'approved' ? 'Approved.' : 'Done.'}</h1><p>${messages[r.value.result] ?? r.value.result}</p>`);
+  const headings: Record<string, string> = { approved: 'Approved.', time_passed: 'Time has passed', link_expired: 'Link expired' };
+  return page('Done', html`<h1>${headings[r.value.result] ?? 'Done.'}</h1><p>${messages[r.value.result] ?? r.value.result}</p>`);
 }
 
 function statusWord(status: string): string {

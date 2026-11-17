@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { advance, cancelBooking, decide, expireStale, getBooking, requestBooking, rescheduleBooking, LIMITS } from '../src/bookings.ts';
 import { driveUnfinished, runCron, sendOutbox } from '../src/cron.ts';
 import { CoreError } from '../src/errors.ts';
+import { ownerApi } from '../src/api.ts';
+import type { TokenDeps } from '../src/tokens.ts';
 import { verifyLink } from '../src/crypto.ts';
 import { at, iso, request, setup } from './support/fakes.ts';
 
@@ -201,6 +203,68 @@ describe('approval (F7, R5)', () => {
     clock.advance(LIMITS.pendingTtlMs + 1);
     expect(await expireStale(ctx)).toBe(1);
     expect((await getBooking(ctx.db, a.bookingId))!.status).toBe('expired');
+  });
+
+  it('declines a request still undecided when its meeting time arrives, and refuses a late approval', async () => {
+    const { ctx, clock } = await setup();
+    const a = await requestBooking(ctx, request('project', '2026-11-16T10:00'), web);
+    const b = await requestBooking(ctx, request('project', '2026-11-16T11:00'), { address: '198.51.100.9', via: 'api' });
+    clock.advance(at('2026-11-16T10:00') - clock.now());
+    // Approving before the cron has run still finds the time gone.
+    expect(await decide(ctx, a.bookingId, true, 'owner')).toEqual({ result: 'time_passed' });
+    const row = (await getBooking(ctx.db, a.bookingId))!;
+    expect([row.status, row.reason]).toEqual(['declined', 'time_passed']);
+    // A later request is untouched until its own time comes.
+    expect((await getBooking(ctx.db, b.bookingId))!.status).toBe('pending');
+    clock.advance(60 * 60_000);
+    expect(await expireStale(ctx)).toBe(1);
+    expect((await getBooking(ctx.db, b.bookingId))!.reason).toBe('time_passed');
+  });
+});
+
+describe('the emailed approval link', () => {
+  const api = (ctx: Parameters<typeof ownerApi>[0]) => ownerApi(ctx, { tokens: {} as TokenDeps, owner: { microsoftEmail: '', googleEmail: '' }, microsoftSecretExpiresOn: null });
+  async function linkFor(ctx: Parameters<typeof ownerApi>[0], id: string) {
+    const mail = await ctx.db.prepare("SELECT body, expires_at FROM outbox WHERE kind = 'approval' AND booking_id = ?").bind(id).first<{ body: string; expires_at: number }>();
+    return { token: mail!.body.match(/\/a\/(\S+)/)![1]!, mail: mail! };
+  }
+  const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+    if (!r.ok) throw new Error(JSON.stringify(r.error));
+    return r.value;
+  };
+
+  it('warns against sharing and stops working at the meeting time when that is under 48 hours away', async () => {
+    const { ctx, clock } = await setup();
+    const a = await requestBooking(ctx, request('project', '2026-11-16T10:00'), web); // 26 hours ahead
+    const { token, mail } = await linkFor(ctx, a.bookingId);
+    expect(mail.body).toMatch(/Don't forward or share this link/);
+    expect(mail.body).toMatch(/declined automatically/);
+    expect(mail.expires_at).toBe(at('2026-11-16T10:00'));
+    expect(value(await api(ctx).peekApproval(token))).toMatchObject({ link: 'live', status: 'pending' });
+
+    clock.advance(at('2026-11-16T10:00') - clock.now());
+    const peek = value(await api(ctx).peekApproval(token));
+    expect(peek).toMatchObject({ link: 'time_passed', status: 'declined' });
+    expect(peek).not.toHaveProperty('guest_supplied');
+    expect(value(await api(ctx).decideByLink(token, 'approve'))).toEqual({ result: 'time_passed' });
+    expect((await getBooking(ctx.db, a.bookingId))!.reason).toBe('time_passed');
+  });
+
+  it('stops working after 48 hours while the request itself keeps waiting for the assistant', async () => {
+    const { ctx, clock, calendar } = await setup();
+    const a = await requestBooking(ctx, request('project', '2026-11-18T10:00'), web); // 74 hours ahead
+    const { token, mail } = await linkFor(ctx, a.bookingId);
+    expect(mail.expires_at).toBe(clock.now() + LIMITS.approvalLinkTtlMs);
+    clock.advance(LIMITS.approvalLinkTtlMs - 1);
+    expect(value(await api(ctx).peekApproval(token))).toMatchObject({ link: 'live' });
+    clock.advance(1);
+    const peek = value(await api(ctx).peekApproval(token));
+    expect(peek).toMatchObject({ link: 'expired', status: 'pending' });
+    expect(peek).not.toHaveProperty('guest_supplied');
+    expect(value(await api(ctx).decideByLink(token, 'approve'))).toEqual({ result: 'link_expired', status: 'pending' });
+    expect(calendar.live()).toHaveLength(0);
+    // Signed in, Tom can still approve.
+    expect((await decide(ctx, a.bookingId, true, 'owner_agent')).result).toBe('approved');
   });
 });
 

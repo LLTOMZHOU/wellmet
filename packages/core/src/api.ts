@@ -16,8 +16,10 @@ import * as catalog from './catalog.ts';
 import { findSlots, refreshBusy } from './availability.ts';
 import {
   LIMITS,
+  approvalLinkExpiry,
   cancelBooking,
   decide,
+  expireStale,
   getBooking,
   requestBooking,
   rescheduleBooking,
@@ -94,6 +96,22 @@ async function bookingFromToken(ctx: CoreContext, token: string, purpose: 'manag
   const b = await getBooking(ctx.db, id);
   if (!b) throw new CoreError('not_found', 'This booking no longer exists.');
   return b;
+}
+
+/**
+ * The booking behind an emailed approval link, and whether the link still
+ * works. A request whose meeting time has arrived is declined here rather than
+ * waiting for the next cron run, so the page never offers a dead choice.
+ */
+async function approvalFromToken(ctx: CoreContext, token: string): Promise<{ b: BookingRow; link: 'live' | 'time_passed' | 'expired' }> {
+  let b = await bookingFromToken(ctx, token, 'approve');
+  const now = ctx.clock.now();
+  if (b.status === 'pending' && b.start_ms <= now) {
+    await expireStale(ctx);
+    b = (await getBooking(ctx.db, b.id)) ?? b;
+  }
+  if (b.status === 'declined' && b.reason === 'time_passed') return { b, link: 'time_passed' };
+  return { b, link: now >= approvalLinkExpiry(b) ? 'expired' : 'live' };
 }
 
 async function guestView(ctx: CoreContext, b: BookingRow): Promise<GuestBooking> {
@@ -343,13 +361,21 @@ export function ownerApi(ctx: CoreContext, deps: OwnerDeps) {
 
     peekApproval: (token: string) =>
       run(ctx, 'owner', async () => {
-        const b = await bookingFromToken(ctx, token, 'approve');
+        const { b, link } = await approvalFromToken(ctx, token);
         const type = await catalog.getEventType(ctx.db, b.event_type);
-        return { ...ownerView(b), title: type?.settings.title ?? b.event_type, when: formatOwner(ctx, b.start_ms) };
+        const title = type?.settings.title ?? b.event_type;
+        const when = formatOwner(ctx, b.start_ms);
+        // A dead link shows which request it was and nothing the guest typed.
+        if (link !== 'live') return { link, title, when, status: b.status };
+        // The request itself ends at the meeting time, or after 72 hours if that comes first.
+        const ends = b.expires_at === null ? null : formatOwner(ctx, Math.min(b.expires_at, b.start_ms));
+        return { link, ...ownerView(b), title, when, request_ends: ends, link_expires: formatOwner(ctx, approvalLinkExpiry(b)) };
       }),
     decideByLink: (token: string, action: 'approve' | 'decline') =>
       run(ctx, 'owner', async () => {
-        const b = await bookingFromToken(ctx, token, 'approve');
+        const { b, link } = await approvalFromToken(ctx, token);
+        if (link === 'time_passed') return { result: 'time_passed' as const };
+        if (link === 'expired') return { result: 'link_expired' as const, status: b.status };
         return decide(ctx, b.id, action === 'approve', 'owner_email');
       }),
     finishConnect: (provider: Provider, code: string, codeVerifier: string, redirectUri: string) =>

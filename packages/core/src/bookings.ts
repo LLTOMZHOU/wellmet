@@ -31,6 +31,8 @@ export const LIMITS = {
   pendingAll: 200,
   guestReschedules: 2,
   pendingTtlMs: 72 * HOUR,
+  /** How long the emailed approval link works. It needs no sign-in, so it is kept short. */
+  approvalLinkTtlMs: 48 * HOUR,
   leaseMs: 90_000,
 } as const;
 
@@ -99,13 +101,23 @@ export async function approvalUrl(ctx: CoreContext, id: string): Promise<string>
   return `${ctx.config.ownerUrl}/a/${id}.${await signLink(ctx.keys, 'approve', id)}`;
 }
 
+/**
+ * When the emailed approval link stops working: 48 hours after the request,
+ * or at the meeting's start if that comes first. The link is the only proof of
+ * who is clicking, so it is short-lived; after it, Tom decides through his
+ * assistant, which is signed in.
+ */
+export function approvalLinkExpiry(b: Pick<BookingRow, 'created_at' | 'start_ms'>): number {
+  return Math.min(b.created_at + LIMITS.approvalLinkTtlMs, b.start_ms);
+}
+
 // --- Mail to Tom ---------------------------------------------------------------------
 
 /** Queues a mail to Tom; the cron sends it. Returns the statement, so callers can put it in their batch. */
-function mailStatement(db: Db, now: number, kind: string, bookingId: string | null, subject: string, body: string, onlyIfBookingExists = false) {
+function mailStatement(db: Db, now: number, kind: string, bookingId: string | null, subject: string, body: string, onlyIfBookingExists = false, expiresAt = now + 3 * DAY) {
   const sql = `INSERT INTO outbox (id, kind, booking_id, subject, body, created_at, expires_at)
                SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 ${onlyIfBookingExists ? 'WHERE EXISTS (SELECT 1 FROM bookings WHERE id = ?3)' : ''}`;
-  return db.prepare(sql).bind(newId(), kind, bookingId, subject, body, now, now + 3 * DAY);
+  return db.prepare(sql).bind(newId(), kind, bookingId, subject, body, now, expiresAt);
 }
 
 function formatForTom(ctx: CoreContext, ms: number): string {
@@ -248,6 +260,7 @@ async function insertPending(
           AND (SELECT COUNT(*) FROM bookings WHERE status = 'pending') < ?24`)
       .bind(...insertValues(row, 'pending', mode, null, now + LIMITS.pendingTtlMs), LIMITS.pendingPerSource, LIMITS.pendingAll);
     const answers = JSON.parse(row.answers) as Record<string, string>;
+    const linkExpiry = approvalLinkExpiry(row);
     const why = mode === 'approval' ? '' : mode === 'held'
       ? '\nThis type normally confirms instantly; it is waiting because the Outlook connection is broken.\n'
       : '\nThis type normally confirms instantly; it is waiting because the instant-booking limit for the day was reached.\n';
@@ -260,9 +273,14 @@ async function insertPending(
       ...Object.entries(answers).map(([k, v]) => `  ${k}: ${v}`),
       '',
       `Approve or decline: ${await approvalUrl(ctx, row.id)}`,
-      `Or ask your assistant. This request lapses in 72 hours.`,
+      `Don't forward or share this link: anyone who has it can approve or decline this request without signing in. It stops working on ${formatForTom(ctx, linkExpiry)}.`,
+      '',
+      row.start_ms <= now + LIMITS.pendingTtlMs
+        ? 'You can also ask your assistant. A request still undecided when the meeting time arrives is declined automatically.'
+        : 'After that, ask your assistant. This request lapses in 72 hours.',
     ].join('\n');
-    const mail = mailStatement(ctx.db, now, 'approval', row.id, `Booking request: ${title}, ${formatForTom(ctx, row.start_ms)}`, body, true);
+    // A mail that could only arrive after its link died is not worth sending.
+    const mail = mailStatement(ctx.db, now, 'approval', row.id, `Booking request: ${title}, ${formatForTom(ctx, row.start_ms)}`, body, true, linkExpiry);
     const [r] = await ctx.db.batch([insert, mail]);
     return r!.meta.changes === 1;
   };
@@ -527,6 +545,7 @@ export type DecideResult =
   | { result: 'already_approved' }
   | { result: 'already_decided'; status: BookingRow['status'] }
   | { result: 'time_taken' }
+  | { result: 'time_passed' }
   | { result: 'try_again' }
   | { result: 'calendar_problem'; detail: 'conflict' | 'unavailable' };
 
@@ -548,7 +567,7 @@ export async function decide(ctx: CoreContext, id: string, approve: boolean, by:
   const limits = type?.settings.limits ?? {};
   const r = await db
     .prepare(`UPDATE bookings SET status = 'accepted', decided_by = ?2, updated_at = ?3, lease_until = NULL, attempts = 0
-              WHERE id = ?1 AND status = 'pending' AND expires_at > ?3
+              WHERE id = ?1 AND status = 'pending' AND expires_at > ?3 AND start_ms > ?3
                 AND NOT EXISTS (SELECT 1 FROM bookings o WHERE o.status IN ('accepted', 'confirmed') AND o.id != ?1
                                 AND o.block_start_ms < bookings.block_end_ms AND o.block_end_ms > bookings.block_start_ms)
                 AND (?4 IS NULL OR (SELECT COUNT(*) FROM bookings o WHERE o.event_type = bookings.event_type AND o.status IN ('accepted', 'confirmed') AND o.local_date = bookings.local_date) < ?4)
@@ -570,6 +589,10 @@ export async function decide(ctx: CoreContext, id: string, approve: boolean, by:
   const after = await requireBooking(db, id);
   if (after.status === 'accepted' || after.status === 'confirmed') return { result: 'already_approved' };
   if (after.status !== 'pending') return { result: 'already_decided', status: after.status };
+  if (after.start_ms <= now) {
+    await expireStale(ctx);
+    return { result: 'time_passed' };
+  }
   if (after.expires_at !== null && after.expires_at <= now) {
     await expireStale(ctx);
     return { result: 'already_decided', status: 'expired' };
@@ -662,13 +685,19 @@ export async function rescheduleBooking(ctx: CoreContext, id: string, newStartIs
 
 // --- Housekeeping ------------------------------------------------------------------------------
 
+/**
+ * Settles requests Tom never answered: one whose meeting time has arrived is
+ * declined, and one that has waited 72 hours lapses. Returns how many changed.
+ */
 export async function expireStale(ctx: CoreContext): Promise<number> {
-  const r = await ctx.db
-    .prepare(`UPDATE bookings SET status = 'expired', reason = 'not_decided', retry_key = NULL, updated_at = ?1
-              WHERE status = 'pending' AND expires_at <= ?1`)
-    .bind(ctx.clock.now())
-    .run();
-  return r.meta.changes;
+  const now = ctx.clock.now();
+  const [passed, lapsed] = await ctx.db.batch([
+    ctx.db.prepare(`UPDATE bookings SET status = 'declined', reason = 'time_passed', retry_key = NULL, updated_at = ?1
+                    WHERE status = 'pending' AND start_ms <= ?1`).bind(now),
+    ctx.db.prepare(`UPDATE bookings SET status = 'expired', reason = 'not_decided', retry_key = NULL, updated_at = ?1
+                    WHERE status = 'pending' AND expires_at <= ?1`).bind(now),
+  ]);
+  return passed!.meta.changes + lapsed!.meta.changes;
 }
 
 /** Bookings the cron should run `advance` on, most urgent first. */

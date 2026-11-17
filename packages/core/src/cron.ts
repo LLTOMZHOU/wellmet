@@ -12,7 +12,8 @@ export interface MailSender {
 
 /**
  * Runs every minute, in this order (design D): refresh the busy snapshot,
- * drive up to 5 unfinished bookings, expire 72-hour requests, send up to 10
+ * drive up to 5 unfinished bookings, settle requests that went unanswered
+ * (meeting time arrived, or 72 hours passed), send up to 10
  * queued mails. Each step is independent: one failing doesn't stop the rest.
  */
 export async function runCron(ctx: CoreContext, mail: MailSender): Promise<Record<string, string>> {

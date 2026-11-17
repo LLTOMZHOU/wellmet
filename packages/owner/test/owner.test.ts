@@ -199,7 +199,8 @@ describe('owner pages', () => {
       CORE: {
         ping: async () => ok({ contract: 1 }),
         peekApproval: async () => ok({
-          id: 'b', title: 'Intro call', when: 'Monday, November 16 at 10:00 AM PST', status: 'pending', length_min: 30, expires_at: null,
+          link: 'live', id: 'b', title: 'Intro call', when: 'Monday, November 16 at 10:00 AM PST', status: 'pending', length_min: 30, expires_at: null,
+          request_ends: 'Monday, November 16 at 10:00 AM PST', link_expires: 'Monday, November 16 at 10:00 AM PST',
           guest_supplied: { warning: 'w', name: '<script>alert(1)</script>', email: 'm@x.com', timezone: 'UTC', answers: { topic: '<img src=x onerror=1>' } },
         } as never),
         decideByLink: async () => ok({ result: 'approved' }),
@@ -223,6 +224,34 @@ describe('owner pages', () => {
     expect(body).not.toContain('<img src=x');
     expect(body).toMatch(/Typed by the guest/);
     expect(body).toContain('method="post"');
+  });
+
+  it('warns Tom not to share the approval link, and says when it stops working', async () => {
+    const body = await (await handlePage(new Request('https://meet-mcp.example/a/b.mac'), env())).text();
+    expect(body).toMatch(/Don't share this page's address/);
+    expect(body).toContain('stops working on Monday, November 16 at 10:00 AM PST');
+  });
+
+  it('explains that the time has passed, without a form or the guest\'s details', async () => {
+    const peek = async () => ok({ link: 'time_passed', title: 'Intro call', when: 'Monday, November 16 at 10:00 AM PST', status: 'declined' } as never);
+    const res = await handlePage(new Request('https://meet-mcp.example/a/b.mac'), env({ peekApproval: peek }));
+    const body = await res.text();
+    expect(res.status).toBe(410);
+    expect(body).toContain('Time has passed');
+    expect(body).toMatch(/declined automatically/);
+    expect(body).not.toContain('method="post"');
+    expect(body).not.toMatch(/Typed by the guest/);
+  });
+
+  it('says an expired link no longer works and points a waiting request to the assistant', async () => {
+    const peek = async () => ok({ link: 'expired', title: 'Intro call', when: 'Friday, November 20 at 10:00 AM PST', status: 'pending' } as never);
+    const res = await handlePage(new Request('https://meet-mcp.example/a/b.mac'), env({ peekApproval: peek }));
+    const body = await res.text();
+    expect(res.status).toBe(410);
+    expect(body).toContain('Link expired');
+    expect(body).toMatch(/Ask your assistant/);
+    expect(body).not.toContain('method="post"');
+    expect(body).not.toMatch(/Typed by the guest/);
   });
 
   it('serves its favicon and lets pages show it', async () => {
